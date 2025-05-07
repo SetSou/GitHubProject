@@ -34,8 +34,9 @@ height = 1.3
 [node name="Geometry" type="Node3D" parent="."]
 
 [node name="CSGBox3D" type="CSGBox3D" parent="Geometry"]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 8.48323, 0.0303049, 0.0187445)
 use_collision = true
-size = Vector3(20, 1, 20)
+size = Vector3(36.9579, 1, 20)
 material = SubResource("StandardMaterial3D_jvxgj")
 
 [node name="CSGCylinder3D" type="CSGCylinder3D" parent="Geometry"]
@@ -125,6 +126,8 @@ environment = SubResource("Environment_04r10")
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
 floor_max_angle = 1.0472
 script = ExtResource("1_uphot")
+INTERACT = null
+SHOOT = null
 
 [node name="CollisionShapeNormal" type="CollisionShape3D" parent="UCharacterBody3D"]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)

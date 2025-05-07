@@ -39,6 +39,10 @@ class_name UCharacterBody3D
 @export var CROUCH : String = "action_crouch"
 ## The InputMap action string to be used for jumping
 @export var JUMP : String = "action_jump"
+## The InputMap action string to be used for interactions
+@export var INTERACT : String = "action_interact"
+## The InputMap action string to be used for shooting
+@export var SHOOT : String = "action_shoot"
 ## A default value of 0.4 is a good starting point, stay between 0.01 and 1.0
 @export var MOUSE_SENSITIVITY : float = 0.4
 
