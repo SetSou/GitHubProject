@@ -1,0 +1,360 @@
+[gd_scene load_steps=24 format=3 uid="uid://b57uspbprxc8"]
+
+[ext_resource type="Script" uid="uid://dqx4xk6olur40" path="res://scripts/world.gd" id="1_ho7yh"]
+[ext_resource type="PackedScene" uid="uid://bd3ai1v40ssao" path="res://map.tscn" id="3_fd0sg"]
+[ext_resource type="Script" uid="uid://c22ii1v4jmeod" path="res://scripts/ui/fps_counter.gd" id="4_2328u"]
+[ext_resource type="Script" uid="uid://mdtldg46yffl" path="res://scripts/ui/menu/host_button.gd" id="4_nuahp"]
+[ext_resource type="Shader" uid="uid://5urbprjr5ovk" path="res://scripts/shaders/blur.gdshader" id="4_p7mxg"]
+[ext_resource type="AudioStream" uid="uid://p6uvqtljqic7" path="res://audio/661248__magmadiverrr__video-game-menu-music.ogg" id="4_taatn"]
+[ext_resource type="Script" uid="uid://dpxwvuo6j8n6f" path="res://scripts/ui/menu/options/fullscreen.gd" id="5_abwkb"]
+[ext_resource type="Script" uid="uid://bujk6wrys0m0d" path="res://scripts/ui/menu/options/mouse_sensitivity.gd" id="6_00vww"]
+[ext_resource type="Script" uid="uid://c3oqk3yl0fpm8" path="res://scripts/ui/menu/options/back.gd" id="6_2hany"]
+[ext_resource type="Script" uid="uid://dc0segcpgntrb" path="res://scripts/ui/menu/options_button.gd" id="6_7g7sm"]
+[ext_resource type="Script" uid="uid://dfcyc0ro0cd0n" path="res://scripts/ui/menu/pause/resume.gd" id="7_5cdyw"]
+[ext_resource type="Script" uid="uid://dx2c4dbo6faas" path="res://scripts/ui/menu/options/controller_sensitivity.gd" id="7_jhf7u"]
+[ext_resource type="Script" uid="uid://d0grywwjd7lp8" path="res://scripts/ui/menu/pause/quit.gd" id="9_ucmny"]
+
+[sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_r06yd"]
+energy_multiplier = 1.25
+
+[sub_resource type="Sky" id="Sky_78err"]
+sky_material = SubResource("PhysicalSkyMaterial_r06yd")
+
+[sub_resource type="Environment" id="Environment_v7lsv"]
+background_mode = 2
+sky = SubResource("Sky_78err")
+tonemap_mode = 2
+tonemap_white = 6.0
+ssao_enabled = true
+glow_blend_mode = 4
+fog_enabled = true
+fog_sun_scatter = 0.17
+fog_density = 0.0099
+fog_aerial_perspective = 1.0
+
+[sub_resource type="CameraAttributesPractical" id="CameraAttributesPractical_wntx8"]
+
+[sub_resource type="Animation" id="Animation_ug7wi"]
+resource_name = "Dolly"
+length = 120.0
+loop_mode = 1
+tracks/0/type = "bezier"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("../DollyCamera:position:z")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"handle_modes": PackedInt32Array(0, 0, 0, 0),
+"points": PackedFloat32Array(0.659, -0.25, 0, 0.25, 0, -14.157, -0.25, 0, 0.25, 0, 13.2434, -0.25, 0, 0.25, 0, 0.659, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0, 30.0667, 89.9333, 120)
+}
+
+[sub_resource type="Animation" id="Animation_ei2s0"]
+length = 0.001
+tracks/0/type = "bezier"
+tracks/0/imported = false
+tracks/0/enabled = true
+tracks/0/path = NodePath("../DollyCamera:position:z")
+tracks/0/interp = 1
+tracks/0/loop_wrap = true
+tracks/0/keys = {
+"handle_modes": PackedInt32Array(0),
+"points": PackedFloat32Array(13.2434, -0.25, 0, 0.25, 0),
+"times": PackedFloat32Array(0)
+}
+
+[sub_resource type="AnimationLibrary" id="AnimationLibrary_lekn2"]
+_data = {
+&"Dolly": SubResource("Animation_ug7wi"),
+&"RESET": SubResource("Animation_ei2s0")
+}
+
+[sub_resource type="ShaderMaterial" id="ShaderMaterial_nou27"]
+shader = ExtResource("4_p7mxg")
+shader_parameter/blur_amount = 2.0
+shader_parameter/mix_amount = 0.0
+shader_parameter/color_over = Color(0, 0, 0, 1)
+
+[sub_resource type="Theme" id="Theme_utqnk"]
+
+[sub_resource type="NavigationMesh" id="NavigationMesh_2o6r5"]
+vertices = PackedVector3Array(-4.62167, 2.96673, -19.6217, -4.62167, 2.96673, -15.1217, 2.62833, 2.96673, -15.1217, 2.62833, 2.96673, -19.6217, -2.37167, 0.466726, -18.1217, 2.37833, 0.466726, -18.1217, 2.37833, 0.466726, -19.3717, -2.62167, 0.466726, -18.8717, -5.12167, 0.466726, -18.8717, -11.1217, 0.466726, -18.3717, -10.6217, 0.466726, -16.1217, -5.62167, 0.466726, -16.1217, -13.3717, 0.466726, -18.3717, -19.3717, 0.466726, -15.6217, -13.8717, 0.466726, -15.6217, -19.3717, 0.466726, -19.3717, 8.37833, 0.466726, -16.8717, 9.37833, 0.466726, -17.1217, 9.37833, 0.466726, -19.3717, 2.37833, 0.466726, -9.62167, 5.62833, 0.466726, -9.62167, 5.87833, 0.466726, -10.3717, 3.62833, 0.466726, -14.3717, 2.37833, 0.466726, -14.1217, 7.12833, 0.466726, -10.3717, 7.62833, 0.466726, -9.62167, 9.37833, 0.466726, -14.6217, 3.62833, 0.466726, -19.3717, 8.37833, 0.466726, -15.3717, 17.3783, 0.466726, -12.6217, 17.6283, 0.466726, -11.3717, 19.3783, 0.466726, -11.3717, 19.3783, 0.466726, -19.3717, 12.1283, 0.466726, -14.6217, 11.6283, 0.466726, -14.3717, 14.8783, 0.466726, -12.1217, 15.1283, 0.466726, -12.6217, 12.1283, 0.466726, -15.8717, -4.37167, 0.466726, -16.6217, -4.37167, 0.466726, -15.3717, 2.37833, 0.466726, -15.3717, 2.37833, 0.466726, -16.6217, -5.62167, 0.466726, -11.1217, -5.37167, 0.466726, -9.62167, -3.12167, 0.466726, -9.62167, -3.12167, 0.466726, -14.1217, -5.37167, 0.466726, -14.1217, -7.12167, 0.466726, -11.1217, -7.37167, 0.466726, -10.6217, -11.3717, 0.466726, -15.3717, -16.8717, 0.466726, -3.87167, -16.1217, 0.466726, -3.62167, -15.3717, 0.466726, -4.87167, -16.6217, 0.466726, -5.62167, -13.6217, 0.466726, -15.1217, -12.1217, 0.466726, -4.62167, -11.8717, 0.466726, -2.62167, -7.37167, 0.466726, -2.62167, -17.6217, 0.466726, -5.87167, -19.3717, 0.466726, -1.87167, 18.1283, 0.466726, 6.37833, 18.6283, 0.466726, 7.37833, 19.3783, 0.466726, 7.37833, 18.1283, 0.466726, 4.37833, 16.3783, 0.466726, 4.62833, 16.3783, 0.466726, 6.12833, 7.37833, 0.466726, -4.12167, 8.12833, 0.466726, -3.12167, 13.6283, 0.466726, -4.62167, 14.8783, 0.466726, -10.3717, 17.1283, 0.466726, -9.87167, 18.3783, 0.466726, -4.62167, 19.3783, 0.466726, -4.87167, 17.1283, 0.466726, -4.37167, 15.3783, 0.466726, -9.87167, 13.3783, 0.466726, -3.12167, 0.878328, 0.466726, -9.37167, -0.871672, 0.466726, -9.37167, -0.871672, 0.466726, -2.37167, 0.878328, 0.466726, -2.37167, -6.37167, 5.46673, -8.62167, -6.37167, 5.46673, -1.37167, -1.87167, 5.46673, -1.37167, -1.87167, 5.46673, -8.62167, 1.87833, 2.96673, -8.62167, 1.87833, 2.96673, -1.37167, 6.37833, 2.96673, -1.37167, 6.37833, 2.96673, -8.62167, -6.12167, 0.466726, -8.37167, -6.12167, 0.466726, -1.62167, -4.87167, 0.466726, -1.62167, -4.87167, 0.466726, -8.37167, -6.12167, 2.96673, -8.37167, -6.12167, 2.96673, -1.62167, -4.87167, 2.96673, -1.62167, -4.87167, 2.96673, -8.37167, -3.37167, 0.466726, -3.12167, -2.12167, 0.466726, -2.37167, -2.12167, 0.466726, -8.37167, -3.37167, 0.466726, -8.37167, -3.37167, 2.96673, -8.37167, -3.37167, 2.96673, -1.62167, -2.12167, 2.96673, -1.62167, -2.12167, 2.96673, -8.37167, 2.12833, 0.466726, -8.37167, 2.12833, 0.466726, -1.62167, 3.37833, 0.466726, -1.62167, 3.37833, 0.466726, -8.37167, 4.87833, 0.466726, -8.37167, 4.87833, 0.466726, -1.62167, 6.12833, 0.466726, -1.62167, 6.12833, 0.466726, -8.37167, -19.1217, 2.96673, 1.62833, -19.6217, 2.96673, 1.87833, -19.3717, 2.96673, 2.37833, -17.6217, 2.96673, 2.62833, -12.8717, 2.96673, -3.62167, -15.1217, 2.96673, -3.62167, -14.8717, 2.96673, -3.37167, -16.6217, 2.96673, -4.62167, -17.3717, 2.96673, -4.37167, -15.8717, 2.96673, -3.12167, -14.6217, 2.96673, 3.62833, -12.8717, 2.96673, 3.62833, -15.3717, 0.466726, 4.62833, -15.8717, 0.466726, 0.128328, -16.8717, 0.466726, 3.62833, -15.1217, 0.466726, 14.8783, -12.6217, 0.466726, 15.1283, -12.3717, 0.466726, 14.6283, -15.6217, 0.466726, 12.6283, -19.3717, 0.466726, 13.8783, -17.1217, 0.466726, 13.8783, -16.8717, 0.466726, 12.6283, -18.3717, 0.466726, 3.62833, -19.3717, 0.466726, 2.87833, -7.37167, 0.466726, 3.12833, -11.8717, 0.466726, 3.12833, -12.1217, 0.466726, 4.62833, -7.37167, 0.466726, 11.3783, -10.6217, 0.466726, 14.6283, 19.6283, 2.96673, 3.37833, 19.6283, 2.96673, 0.878328, 19.1283, 2.96673, 0.628328, 17.8783, 2.96673, 3.62833, 17.3783, 2.96673, -0.871672, 14.3783, 2.96673, 3.62833, 16.1283, 2.96673, 3.62833, 16.3783, 2.96673, -1.12167, 14.3783, 2.96673, -3.62167, 18.6283, 2.96673, -3.62167, -14.3717, 0.466726, -3.37167, -14.3717, 0.466726, 3.37833, -13.1217, 0.466726, 3.37833, -13.1217, 0.466726, -3.37167, 14.6283, 0.466726, -3.37167, 14.6283, 0.466726, 3.37833, 15.8783, 0.466726, 3.37833, 15.8783, 0.466726, -3.37167, 8.12833, 0.466726, -2.37167, 7.37833, 0.466726, -2.12167, 7.12833, 0.466726, -0.371672, 5.37833, 0.466726, -0.371672, 5.37833, 0.466726, 1.37833, 7.12833, 0.466726, 1.37833, 7.37833, 0.466726, 3.12833, 13.3783, 0.466726, 3.12833, -7.12167, 0.466726, 1.37833, -7.12167, 0.466726, -0.371672, -2.62167, 0.466726, -0.621672, -2.87167, 0.466726, -1.37167, -3.37167, 0.466726, -1.37167, -3.62167, 0.466726, -0.371672, 1.12833, 0.466726, -0.371672, 0.878328, 0.466726, 1.62833, -1.12167, 0.466726, -0.371672, -0.871672, 0.466726, 1.62833, -0.871672, 0.466726, 8.62833, 0.878328, 0.466726, 8.62833, -6.37167, 2.96673, 2.37833, -6.37167, 2.96673, 9.62833, -1.87167, 2.96673, 9.62833, -1.87167, 2.96673, 2.37833, 1.87833, 5.46673, 2.37833, 1.87833, 5.46673, 9.62833, 6.37833, 5.46673, 9.62833, 6.37833, 5.46673, 2.37833, -6.12167, 0.466726, 2.62833, -6.12167, 0.466726, 9.37833, -4.87167, 0.466726, 9.37833, -4.87167, 0.466726, 2.62833, -3.37167, 0.466726, 2.62833, -3.37167, 0.466726, 9.37833, -2.12167, 0.466726, 9.37833, -2.12167, 0.466726, 2.62833, 2.12833, 0.466726, 2.62833, 2.12833, 0.466726, 9.37833, 3.37833, 0.466726, 9.37833, 3.37833, 0.466726, 2.62833, 2.12833, 2.96673, 2.62833, 2.12833, 2.96673, 9.37833, 3.37833, 2.96673, 9.37833, 3.37833, 2.96673, 2.62833, 4.87833, 0.466726, 2.62833, 4.87833, 0.466726, 9.37833, 6.12833, 0.466726, 9.37833, 6.12833, 0.466726, 2.62833, 4.87833, 2.96673, 2.62833, 4.87833, 2.96673, 9.37833, 6.12833, 2.96673, 9.37833, 6.12833, 2.96673, 2.62833, 15.8783, 0.466726, 6.37833, 13.6283, 0.466726, 4.62833, 17.6283, 0.466726, 8.87833, 19.3783, 0.466726, 19.3783, 15.8783, 0.466726, 8.37833, 7.37833, 0.466726, 11.6283, 5.87833, 0.466726, 12.1283, 3.62833, 0.466726, 14.6283, 0.378328, 0.466726, 15.3783, -4.37167, 0.466726, 15.3783, -4.37167, 0.466726, 16.6283, 0.628328, 0.466726, 16.1283, 16.3783, 0.466726, 8.87833, 3.37833, 0.466726, 16.6283, 2.62833, 0.466726, 16.1283, 3.62833, 0.466726, 19.3783, -5.37167, 0.466726, 11.6283, -6.12167, 0.466726, 12.1283, -5.62167, 0.466726, 14.3783, 3.37833, 0.466726, 14.1283, 1.12833, 0.466726, 10.6283, -1.12167, 0.466726, 10.6283, 5.37833, 0.466726, 11.8783, 5.37833, 0.466726, 10.6283, -5.37167, 0.466726, 10.6283, -10.6217, 0.466726, 17.3783, -11.1217, 0.466726, 17.3783, -11.1217, 0.466726, 19.3783, -6.87167, 0.466726, 12.1283, -9.87167, 0.466726, 15.1283, -9.87167, 0.466726, 16.1283, -5.62167, 0.466726, 19.3783, -15.3717, 0.466726, 15.3783, -12.6217, 0.466726, 16.3783, -16.6217, 0.466726, 15.3783, -19.3717, 0.466726, 19.3783, -4.62167, 2.96673, 15.1283, -4.62167, 2.96673, 19.6283, 2.62833, 2.96673, 19.6283, 2.62833, 2.96673, 15.1283, -4.37167, 0.466726, 18.1283, -4.37167, 0.466726, 19.3783, 2.37833, 0.466726, 19.3783, 2.37833, 0.466726, 18.1283)
+polygons = [PackedInt32Array(3, 2, 0), PackedInt32Array(0, 2, 1), PackedInt32Array(4, 7, 5), PackedInt32Array(5, 7, 6), PackedInt32Array(6, 7, 8), PackedInt32Array(10, 9, 11), PackedInt32Array(11, 9, 8), PackedInt32Array(8, 9, 12), PackedInt32Array(14, 13, 12), PackedInt32Array(12, 13, 15), PackedInt32Array(12, 15, 8), PackedInt32Array(8, 15, 6), PackedInt32Array(18, 17, 16), PackedInt32Array(20, 19, 21), PackedInt32Array(21, 19, 22), PackedInt32Array(22, 19, 23), PackedInt32Array(26, 25, 24), PackedInt32Array(18, 16, 27), PackedInt32Array(27, 16, 22), PackedInt32Array(22, 16, 28), PackedInt32Array(21, 22, 24), PackedInt32Array(24, 22, 28), PackedInt32Array(24, 28, 26), PackedInt32Array(30, 29, 31), PackedInt32Array(31, 29, 32), PackedInt32Array(36, 35, 33), PackedInt32Array(33, 35, 34), PackedInt32Array(36, 37, 29), PackedInt32Array(29, 37, 18), PackedInt32Array(29, 18, 32), PackedInt32Array(36, 33, 37), PackedInt32Array(37, 17, 18), PackedInt32Array(41, 40, 38), PackedInt32Array(38, 40, 39), PackedInt32Array(43, 42, 44), PackedInt32Array(44, 42, 46), PackedInt32Array(44, 46, 45), PackedInt32Array(42, 47, 46), PackedInt32Array(46, 47, 11), PackedInt32Array(47, 48, 11), PackedInt32Array(11, 48, 10), PackedInt32Array(10, 48, 49), PackedInt32Array(51, 50, 52), PackedInt32Array(52, 50, 53), PackedInt32Array(54, 49, 48), PackedInt32Array(55, 52, 53), PackedInt32Array(56, 55, 57), PackedInt32Array(57, 55, 48), PackedInt32Array(53, 58, 55), PackedInt32Array(55, 58, 48), PackedInt32Array(48, 58, 54), PackedInt32Array(54, 58, 13), PackedInt32Array(13, 14, 54), PackedInt32Array(58, 59, 13), PackedInt32Array(61, 60, 62), PackedInt32Array(62, 60, 63), PackedInt32Array(64, 63, 65), PackedInt32Array(65, 63, 60), PackedInt32Array(67, 66, 68), PackedInt32Array(68, 66, 25), PackedInt32Array(68, 25, 69), PackedInt32Array(69, 25, 34), PackedInt32Array(30, 31, 70), PackedInt32Array(70, 31, 72), PackedInt32Array(70, 72, 71), PackedInt32Array(25, 26, 34), PackedInt32Array(34, 35, 69), PackedInt32Array(73, 71, 63), PackedInt32Array(63, 71, 62), PackedInt32Array(73, 68, 71), PackedInt32Array(71, 68, 74), PackedInt32Array(74, 68, 69), PackedInt32Array(68, 75, 67), PackedInt32Array(74, 70, 71), PackedInt32Array(76, 77, 19), PackedInt32Array(19, 77, 44), PackedInt32Array(19, 44, 45), PackedInt32Array(19, 45, 23), PackedInt32Array(76, 79, 77), PackedInt32Array(77, 79, 78), PackedInt32Array(83, 82, 80), PackedInt32Array(80, 82, 81), PackedInt32Array(87, 86, 84), PackedInt32Array(84, 86, 85), PackedInt32Array(91, 90, 88), PackedInt32Array(88, 90, 89), PackedInt32Array(95, 94, 92), PackedInt32Array(92, 94, 93), PackedInt32Array(99, 98, 96), PackedInt32Array(96, 98, 97), PackedInt32Array(103, 102, 100), PackedInt32Array(100, 102, 101), PackedInt32Array(107, 106, 104), PackedInt32Array(104, 106, 105), PackedInt32Array(111, 110, 108), PackedInt32Array(108, 110, 109), PackedInt32Array(113, 112, 114), PackedInt32Array(114, 112, 115), PackedInt32Array(118, 117, 116), PackedInt32Array(118, 121, 117), PackedInt32Array(117, 121, 119), PackedInt32Array(119, 121, 120), PackedInt32Array(115, 112, 121), PackedInt32Array(121, 112, 120), PackedInt32Array(122, 118, 123), PackedInt32Array(123, 118, 116), PackedInt32Array(124, 126, 125), PackedInt32Array(128, 127, 129), PackedInt32Array(129, 127, 130), PackedInt32Array(132, 131, 133), PackedInt32Array(133, 131, 134), PackedInt32Array(134, 131, 135), PackedInt32Array(126, 124, 134), PackedInt32Array(134, 124, 133), PackedInt32Array(133, 124, 130), PackedInt32Array(50, 51, 135), PackedInt32Array(135, 51, 134), PackedInt32Array(137, 136, 138), PackedInt32Array(138, 136, 139), PackedInt32Array(129, 130, 140), PackedInt32Array(140, 130, 139), PackedInt32Array(139, 130, 138), PackedInt32Array(138, 130, 124), PackedInt32Array(143, 142, 141), PackedInt32Array(141, 144, 143), PackedInt32Array(143, 144, 145), PackedInt32Array(147, 146, 148), PackedInt32Array(148, 146, 149), PackedInt32Array(145, 150, 143), PackedInt32Array(145, 148, 150), PackedInt32Array(150, 148, 149), PackedInt32Array(154, 153, 151), PackedInt32Array(151, 153, 152), PackedInt32Array(158, 157, 155), PackedInt32Array(155, 157, 156), PackedInt32Array(161, 160, 159), PackedInt32Array(161, 164, 162), PackedInt32Array(162, 164, 163), PackedInt32Array(159, 67, 75), PackedInt32Array(164, 161, 165), PackedInt32Array(165, 161, 159), PackedInt32Array(165, 159, 166), PackedInt32Array(166, 159, 75), PackedInt32Array(167, 136, 168), PackedInt32Array(168, 136, 57), PackedInt32Array(57, 136, 137), PackedInt32Array(57, 137, 56), PackedInt32Array(170, 169, 171), PackedInt32Array(171, 169, 172), PackedInt32Array(162, 163, 173), PackedInt32Array(173, 163, 174), PackedInt32Array(169, 175, 172), PackedInt32Array(172, 175, 176), PackedInt32Array(174, 176, 173), PackedInt32Array(173, 176, 175), PackedInt32Array(173, 175, 78), PackedInt32Array(173, 78, 79), PackedInt32Array(174, 178, 176), PackedInt32Array(176, 178, 177), PackedInt32Array(168, 172, 167), PackedInt32Array(167, 172, 176), PackedInt32Array(182, 181, 179), PackedInt32Array(179, 181, 180), PackedInt32Array(186, 185, 183), PackedInt32Array(183, 185, 184), PackedInt32Array(190, 189, 187), PackedInt32Array(187, 189, 188), PackedInt32Array(194, 193, 191), PackedInt32Array(191, 193, 192), PackedInt32Array(198, 197, 195), PackedInt32Array(195, 197, 196), PackedInt32Array(202, 201, 199), PackedInt32Array(199, 201, 200), PackedInt32Array(206, 205, 203), PackedInt32Array(203, 205, 204), PackedInt32Array(210, 209, 207), PackedInt32Array(207, 209, 208), PackedInt32Array(65, 211, 64), PackedInt32Array(64, 211, 212), PackedInt32Array(61, 62, 213), PackedInt32Array(213, 62, 214), PackedInt32Array(212, 165, 166), PackedInt32Array(211, 215, 212), PackedInt32Array(212, 215, 165), PackedInt32Array(165, 215, 216), PackedInt32Array(218, 217, 216), PackedInt32Array(219, 222, 220), PackedInt32Array(220, 222, 221), PackedInt32Array(216, 215, 223), PackedInt32Array(225, 224, 222), PackedInt32Array(222, 224, 221), PackedInt32Array(218, 216, 226), PackedInt32Array(226, 216, 223), PackedInt32Array(226, 223, 213), PackedInt32Array(226, 213, 214), PackedInt32Array(224, 225, 218), PackedInt32Array(226, 224, 218), PackedInt32Array(228, 227, 229), PackedInt32Array(229, 227, 232), PackedInt32Array(229, 232, 231), PackedInt32Array(229, 231, 230), PackedInt32Array(178, 231, 177), PackedInt32Array(177, 231, 232), PackedInt32Array(233, 230, 234), PackedInt32Array(234, 230, 231), PackedInt32Array(233, 217, 230), PackedInt32Array(230, 217, 218), PackedInt32Array(227, 235, 232), PackedInt32Array(238, 237, 236), PackedInt32Array(239, 228, 229), PackedInt32Array(239, 229, 139), PackedInt32Array(139, 229, 240), PackedInt32Array(139, 240, 140), PackedInt32Array(236, 241, 238), PackedInt32Array(238, 241, 242), PackedInt32Array(242, 241, 229), PackedInt32Array(241, 240, 229), PackedInt32Array(127, 128, 243), PackedInt32Array(243, 128, 244), PackedInt32Array(237, 238, 244), PackedInt32Array(244, 238, 243), PackedInt32Array(243, 238, 245), PackedInt32Array(245, 238, 246), PackedInt32Array(132, 245, 131), PackedInt32Array(131, 245, 246), PackedInt32Array(250, 249, 247), PackedInt32Array(247, 249, 248), PackedInt32Array(254, 253, 251), PackedInt32Array(251, 253, 252)]
+
+[node name="World" type="Node"]
+script = ExtResource("1_ho7yh")
+
+[node name="WorldEnvironment" type="WorldEnvironment" parent="."]
+environment = SubResource("Environment_v7lsv")
+camera_attributes = SubResource("CameraAttributesPractical_wntx8")
+
+[node name="DirectionalLight3D" type="DirectionalLight3D" parent="."]
+transform = Transform3D(-0.835807, -0.47011, 0.283589, -0.375944, 0.866496, 0.328406, -0.400115, 0.167871, -0.900959, 0, 4.88489, 0)
+light_temperature = 4300.0
+light_energy = 5.0
+shadow_enabled = true
+shadow_bias = 0.0
+directional_shadow_split_1 = 0.04
+directional_shadow_split_2 = 0.11
+directional_shadow_split_3 = 0.33
+directional_shadow_blend_splits = true
+directional_shadow_max_distance = 99.3
+
+[node name="FpsCounter" type="Label" parent="."]
+offset_right = 40.0
+offset_bottom = 23.0
+script = ExtResource("4_2328u")
+
+[node name="Menu" type="CanvasLayer" parent="."]
+
+[node name="MenuMusic" type="AudioStreamPlayer" parent="Menu"]
+unique_name_in_owner = true
+stream = ExtResource("4_taatn")
+volume_db = -20.0
+autoplay = true
+bus = &"Music"
+
+[node name="AnimationPlayer" type="AnimationPlayer" parent="Menu"]
+root_node = NodePath("../Blur")
+libraries = {
+&"": SubResource("AnimationLibrary_lekn2")
+}
+autoplay = "Dolly"
+
+[node name="Blur" type="ColorRect" parent="Menu"]
+material = SubResource("ShaderMaterial_nou27")
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="DollyCamera" type="Camera3D" parent="Menu"]
+transform = Transform3D(-1, 0, 8.74228e-08, 0, 1, 0, -8.74228e-08, 0, -1, 0, 0.702964, 13.2434)
+
+[node name="Options" type="PanelContainer" parent="Menu"]
+unique_name_in_owner = true
+visible = false
+anchors_preset = 13
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -180.0
+offset_right = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+theme = SubResource("Theme_utqnk")
+
+[node name="MarginContainer" type="MarginContainer" parent="Menu/Options"]
+layout_mode = 2
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 15
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 15
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Menu/Options/MarginContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 10
+
+[node name="OptionsLabel" type="Label" parent="Menu/Options/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Options
+"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Fullscreen" type="CheckButton" parent="Menu/Options/MarginContainer/VBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+text = "Fullscreen"
+script = ExtResource("5_abwkb")
+
+[node name="FpsCounter" type="CheckButton" parent="Menu/Options/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "FPS counter"
+
+[node name="Ping" type="CheckButton" parent="Menu/Options/MarginContainer/VBoxContainer"]
+layout_mode = 2
+tooltip_text = "Shows connection trip time to host (in milliseconds)"
+text = "View Ping"
+
+[node name="SensitivityLabel" type="Label" parent="Menu/Options/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Sensitivity"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Menu/Options/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Mouse sensitivity"
+
+[node name="MouseSensitivity" type="HSlider" parent="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 0.001
+max_value = 0.1
+step = 0.001
+value = 0.005
+script = ExtResource("6_00vww")
+
+[node name="HBoxContainer2" type="HBoxContainer" parent="Menu/Options/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="Label" type="Label" parent="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+text = "Controller sensitivity"
+
+[node name="ControllerSensitivity" type="HSlider" parent="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer2"]
+layout_mode = 2
+size_flags_horizontal = 3
+size_flags_vertical = 4
+min_value = 0.001
+max_value = 0.1
+step = 0.001
+value = 0.01
+script = ExtResource("7_jhf7u")
+
+[node name="Back" type="Button" parent="Menu/Options/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Back"
+script = ExtResource("6_2hany")
+
+[node name="PauseMenu" type="PanelContainer" parent="Menu"]
+visible = false
+anchors_preset = 13
+anchor_left = 0.5
+anchor_right = 0.5
+anchor_bottom = 1.0
+offset_left = -180.0
+offset_right = 180.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="MarginContainer" type="MarginContainer" parent="Menu/PauseMenu"]
+layout_mode = 2
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 15
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 15
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Menu/PauseMenu/MarginContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 10
+
+[node name="PauseLabel" type="Label" parent="Menu/PauseMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Pause Menu
+"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="Resume" type="Button" parent="Menu/PauseMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Resume"
+script = ExtResource("7_5cdyw")
+
+[node name="Options" type="Button" parent="Menu/PauseMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Options
+"
+
+[node name="Quit" type="Button" parent="Menu/PauseMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Quit"
+script = ExtResource("9_ucmny")
+
+[node name="MainMenu" type="PanelContainer" parent="Menu"]
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_right = 391.0
+grow_vertical = 2
+theme = SubResource("Theme_utqnk")
+
+[node name="MarginContainer" type="MarginContainer" parent="Menu/MainMenu"]
+layout_mode = 2
+theme_override_constants/margin_left = 15
+theme_override_constants/margin_top = 15
+theme_override_constants/margin_right = 15
+theme_override_constants/margin_bottom = 15
+
+[node name="VBoxContainer" type="VBoxContainer" parent="Menu/MainMenu/MarginContainer"]
+layout_mode = 2
+size_flags_vertical = 4
+theme_override_constants/separation = 10
+
+[node name="MainMenuLabel" type="Label" parent="Menu/MainMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Main Menu"
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="HostButton" type="Button" parent="Menu/MainMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Host"
+script = ExtResource("4_nuahp")
+
+[node name="HBoxContainer" type="HBoxContainer" parent="Menu/MainMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+
+[node name="AddressEntry" type="LineEdit" parent="Menu/MainMenu/MarginContainer/VBoxContainer/HBoxContainer"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 3
+placeholder_text = "Enter Address Here to join"
+alignment = 1
+
+[node name="JoinButton" type="Button" parent="Menu/MainMenu/MarginContainer/VBoxContainer/HBoxContainer"]
+layout_mode = 2
+text = "  Join  "
+
+[node name="OptionsButton" type="Button" parent="Menu/MainMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+toggle_mode = true
+text = "Options"
+script = ExtResource("6_7g7sm")
+
+[node name="Quit" type="Button" parent="Menu/MainMenu/MarginContainer/VBoxContainer"]
+layout_mode = 2
+text = "Quit"
+script = ExtResource("9_ucmny")
+
+[node name="MusicToggle" type="CheckButton" parent="Menu/MainMenu"]
+unique_name_in_owner = true
+layout_mode = 2
+size_flags_horizontal = 4
+size_flags_vertical = 8
+button_pressed = true
+text = "Music"
+
+[node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="."]
+_spawnable_scenes = PackedStringArray("uid://b2qhxdrnviyqf", "uid://qqq0n5sej1et")
+spawn_path = NodePath("..")
+
+[node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
+navigation_mesh = SubResource("NavigationMesh_2o6r5")
+
+[node name="map" parent="NavigationRegion3D" instance=ExtResource("3_fd0sg")]
+
+[connection signal="toggled" from="Menu/Options/MarginContainer/VBoxContainer/FpsCounter" to="FpsCounter" method="_on_fps_counter_toggled"]
+[connection signal="toggled" from="Menu/Options/MarginContainer/VBoxContainer/Ping" to="FpsCounter" method="_on_ping_toggled"]
+[connection signal="value_changed" from="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer/MouseSensitivity" to="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer/MouseSensitivity" method="_on_value_changed"]
+[connection signal="value_changed" from="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer2/ControllerSensitivity" to="Menu/Options/MarginContainer/VBoxContainer/HBoxContainer2/ControllerSensitivity" method="_on_value_changed"]
+[connection signal="pressed" from="Menu/Options/MarginContainer/VBoxContainer/Back" to="." method="_on_back_pressed"]
+[connection signal="pressed" from="Menu/Options/MarginContainer/VBoxContainer/Back" to="Menu/PauseMenu/MarginContainer/VBoxContainer/Options" method="_on_back_pressed"]
+[connection signal="pressed" from="Menu/Options/MarginContainer/VBoxContainer/Back" to="Menu/MainMenu/MarginContainer/VBoxContainer/OptionsButton" method="_on_back_pressed"]
+[connection signal="pressed" from="Menu/PauseMenu/MarginContainer/VBoxContainer/Resume" to="." method="_on_resume_pressed"]
+[connection signal="pressed" from="Menu/PauseMenu/MarginContainer/VBoxContainer/Options" to="." method="_on_options_pressed"]
+[connection signal="pressed" from="Menu/MainMenu/MarginContainer/VBoxContainer/HostButton" to="." method="_on_host_button_pressed"]
+[connection signal="pressed" from="Menu/MainMenu/MarginContainer/VBoxContainer/HBoxContainer/JoinButton" to="." method="_on_join_button_pressed"]
+[connection signal="toggled" from="Menu/MainMenu/MarginContainer/VBoxContainer/OptionsButton" to="." method="_on_options_button_toggled"]
+[connection signal="toggled" from="Menu/MainMenu/MarginContainer/VBoxContainer/OptionsButton" to="Menu/Options/MarginContainer/VBoxContainer/Fullscreen" method="_on_options_button_toggled"]
+[connection signal="toggled" from="Menu/MainMenu/MusicToggle" to="." method="_on_music_toggle_toggled"]

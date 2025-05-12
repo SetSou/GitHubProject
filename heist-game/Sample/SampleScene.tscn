@@ -1,6 +1,6 @@
-[gd_scene load_steps=10 format=3 uid="uid://dj1fkbs5vhuti"]
+[gd_scene load_steps=8 format=3 uid="uid://dj1fkbs5vhuti"]
 
-[ext_resource type="Script" uid="uid://ct07j8yo3amlm" path="res://addons/ultimate_character/ucharacterbody3d.gd" id="1_uphot"]
+[ext_resource type="PackedScene" uid="uid://cx7a345jgj06x" path="res://character_body_3d.tscn" id="1_yci2r"]
 
 [sub_resource type="StandardMaterial3D" id="StandardMaterial3D_jvxgj"]
 albedo_color = Color(0.385493, 0.385492, 0.385492, 1)
@@ -23,11 +23,6 @@ background_mode = 2
 sky = SubResource("Sky_pnuh5")
 tonemap_mode = 2
 glow_enabled = true
-
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_cvdvy"]
-
-[sub_resource type="CapsuleShape3D" id="CapsuleShape3D_wgt1v"]
-height = 1.3
 
 [node name="World" type="Node3D"]
 
@@ -122,26 +117,5 @@ shadow_enabled = true
 [node name="WorldEnvironment" type="WorldEnvironment" parent="Environment"]
 environment = SubResource("Environment_04r10")
 
-[node name="UCharacterBody3D" type="CharacterBody3D" parent="."]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.5, 0)
-floor_max_angle = 1.0472
-script = ExtResource("1_uphot")
-INTERACT = null
-SHOOT = null
-
-[node name="CollisionShapeNormal" type="CollisionShape3D" parent="UCharacterBody3D"]
+[node name="CharacterBody3D" parent="." instance=ExtResource("1_yci2r")]
 transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1, 0)
-shape = SubResource("CapsuleShape3D_cvdvy")
-
-[node name="CollisionShapeCrouch" type="CollisionShape3D" parent="UCharacterBody3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 0.65, 0)
-shape = SubResource("CapsuleShape3D_wgt1v")
-disabled = true
-
-[node name="Head" type="Node3D" parent="UCharacterBody3D"]
-transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 1.8, 0)
-
-[node name="Camera" type="Camera3D" parent="UCharacterBody3D/Head"]
-
-[node name="RayCast3D" type="RayCast3D" parent="UCharacterBody3D"]
-target_position = Vector3(0, 2, 0)
