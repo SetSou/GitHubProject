@@ -1,6 +1,7 @@
-[gd_scene load_steps=24 format=3 uid="uid://b57uspbprxc8"]
+[gd_scene load_steps=25 format=3 uid="uid://b57uspbprxc8"]
 
 [ext_resource type="Script" uid="uid://dqx4xk6olur40" path="res://scripts/world.gd" id="1_ho7yh"]
+[ext_resource type="PackedScene" uid="uid://qqq0n5sej1et" path="res://npc.tscn" id="2_70uel"]
 [ext_resource type="PackedScene" uid="uid://bd3ai1v40ssao" path="res://map.tscn" id="3_fd0sg"]
 [ext_resource type="Script" uid="uid://c22ii1v4jmeod" path="res://scripts/ui/fps_counter.gd" id="4_2328u"]
 [ext_resource type="Script" uid="uid://mdtldg46yffl" path="res://scripts/ui/menu/host_button.gd" id="4_nuahp"]
@@ -338,6 +339,9 @@ text = "Music"
 [node name="MultiplayerSpawner" type="MultiplayerSpawner" parent="."]
 _spawnable_scenes = PackedStringArray("uid://b2qhxdrnviyqf", "uid://qqq0n5sej1et")
 spawn_path = NodePath("..")
+
+[node name="NPC" parent="." instance=ExtResource("2_70uel")]
+transform = Transform3D(1, 0, 0, 0, 1, 0, 0, 0, 1, 0, 2.21621, 0)
 
 [node name="NavigationRegion3D" type="NavigationRegion3D" parent="."]
 navigation_mesh = SubResource("NavigationMesh_2o6r5")

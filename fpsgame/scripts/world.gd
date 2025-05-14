@@ -102,7 +102,7 @@ func remove_player(peer_id: int) -> void:
 	var player: Node = get_node_or_null(str(peer_id))
 	if player:
 		player.queue_free()
-
+		
 func upnp_setup() -> void:
 	var upnp: UPNP = UPNP.new()
 

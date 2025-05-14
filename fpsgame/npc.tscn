@@ -16,3 +16,7 @@ mesh = SubResource("CapsuleMesh_xxcha")
 shape = SubResource("CapsuleShape3D_kh24r")
 
 [node name="NavigationAgent3D" type="NavigationAgent3D" parent="."]
+
+[node name="Timer" type="Timer" parent="."]
+wait_time = 5.0
+autostart = true
