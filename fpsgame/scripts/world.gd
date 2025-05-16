@@ -7,6 +7,7 @@ extends Node
 @onready var menu_music: AudioStreamPlayer = %MenuMusic
 
 const Player = preload("res://player.tscn")
+const Npc = preload("res://npc.tscn")
 const PORT = 9999
 var enet_peer: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
 var paused: bool = false
@@ -68,7 +69,8 @@ func _on_host_button_pressed() -> void:
 		options_menu.hide()
 
 	add_player(multiplayer.get_unique_id())
-
+	add_npc()
+	add_npc()
 	upnp_setup()
 
 func _on_join_button_pressed() -> void:
@@ -102,7 +104,11 @@ func remove_player(peer_id: int) -> void:
 	var player: Node = get_node_or_null(str(peer_id))
 	if player:
 		player.queue_free()
-		
+
+func add_npc():
+	var npc: Node = Npc.instantiate()
+	add_child(npc)
+
 func upnp_setup() -> void:
 	var upnp: UPNP = UPNP.new()
 

@@ -1,74 +1,93 @@
 extends CharacterBody3D
 
 @export var speed: float = 5.0  # Movement speed
-@export var min_wait_time: float = 1.0  # Min time before choosing new point
-@export var max_wait_time: float = 3.0  # Max time before choosing new point
-@export var target_reach_distance: float = 0.5  # Distance to consider target reached
+@export var max_distance: float = 50.0  # Maximum distance for random points
+@export var wait_time: float = 2.0  # Time to wait before picking a new point
+@export var gravity: float = 9.8  # Gravity value (default for Godot physics)
+@export var spawns: PackedVector3Array = ([
+	Vector3(-10, 0.2, 10),
+	Vector3(10, 0.2, 10),
+	Vector3(10, 0.2, -10),
+	Vector3(-10, 0.2, -10),
+])
+@onready var nav_agent: NavigationAgent3D = $NavigationAgent3D  # Reference to NavigationAgent3D
+var time_since_last_target: float = 0.0
 
-var navigation_agent: NavigationAgent3D
-var path: Array = []  # Array of Vector3 points for the path
-var current_target: Vector3
-var is_moving: bool = false
-
-func _ready():
-	# Get or add NavigationAgent3D
-	navigation_agent = get_node_or_null("NavigationAgent3D")
-	if not navigation_agent:
-		navigation_agent = NavigationAgent3D.new()
-		add_child(navigation_agent)
-	
-	# Start the random movement process
-	choose_new_random_point()
-
-func _physics_process(delta):
-	print(path.size())
-	if is_moving and path.size() > 0:
-		print("moving")
-		# Get the next point in the path
-		var next_point = path[0]
-		
-		# Move towards the next point
-		var direction = (next_point - global_position).normalized()
-		velocity = direction * speed
-		
-		# Move the NPC
-		move_and_slide()
-		
-		# Check if close to the next point
-		if global_position.distance_to(next_point) < target_reach_distance:
-			path.remove_at(0)  # Remove the reached point
-			if path.size() == 0:
-				# Reached the final target, stop and choose a new point
-				is_moving = false
-				velocity = Vector3.ZERO
-				start_wait_timer()
-
-func choose_new_random_point():
-	# Get the navigation map from the NavigationRegion3D
-	print("choosing random poi")
-	var nav_region = get_parent().get_node_or_null("NavigationRegion3D")
-	if not nav_region:
-		print("No Nav Region")
+func _ready() -> void:
+	if not multiplayer.is_server():
 		return
-	
-	var nav_map = nav_region.navigation_mesh.get_rid()
-	
-	# Get a random point on the navmesh
-	current_target = NavigationServer3D.map_get_random_point(nav_map, true, false)
-	
-	# Calculate path to the random point
-	path = NavigationServer3D.map_get_path(
-		get_world_3d().navigation_map,
-		global_position,
-		current_target,
-		true
-	)
-	print("set is_moving to true")
-	is_moving = true
+	position = spawns[randi() % spawns.size()]
+	# Ensure the navigation agent is set up
+	if nav_agent == null:
+		print("ERROR: NavigationAgent3D not found! Check node setup.")
+		return
+	nav_agent.path_desired_distance = 0.5
+	nav_agent.target_desired_distance = 0.5
+	print("NavigationAgent3D initialized. Current position: ", global_position)
+	# Pick initial random target
+	set_random_target()
 
-func start_wait_timer():
-	print("waiting")
-	# Wait for a random time before choosing a new point
-	var wait_time = randf_range(min_wait_time, max_wait_time)
-	await get_tree().create_timer(wait_time).timeout
-	choose_new_random_point()
+func _physics_process(delta: float) -> void:
+	if not multiplayer.is_server():
+		return# Apply gravity if not on the floor
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	else:
+		velocity.y = 0.0  # Reset vertical velocity when on floor
+
+	# Check if the NPC has reached the target
+	if nav_agent.is_navigation_finished():
+		print("Target reached or navigation finished. Waiting for ", wait_time, " seconds.")
+		time_since_last_target += delta
+		if time_since_last_target >= wait_time:
+			print("Wait time elapsed. Picking new random target.")
+			set_random_target()
+			time_since_last_target = 0.0
+		velocity.x = 0.0
+		velocity.z = 0.0
+		move_and_slide()
+		return
+
+	# Get the next position to move to
+	var next_position: Vector3 = nav_agent.get_next_path_position()
+	var distance_to_next: float = global_position.distance_to(next_position)
+	var direction: Vector3 = (next_position - global_position).normalized()
+	
+	# Move only in XZ plane for navigation
+	velocity.x = direction.x * speed
+	velocity.z = direction.z * speed
+	print("Current position: ", global_position, " | Next path position: ", next_position, " | Velocity: ", velocity)
+
+	# Move the CharacterBody3D
+	var collision = move_and_slide()
+	if collision:
+		var collider = get_last_slide_collision().get_collider() if get_last_slide_collision() else null
+		print("Collision detected. Collider: ", collider, " at position: ", collider.global_position if collider else "Unknown")
+
+func set_random_target() -> void:
+	# Get the navigation map
+	var nav_map: RID = get_world_3d().navigation_map
+	if not nav_map:
+		print("ERROR: No navigation map found! Check NavigationRegion3D setup.")
+		return
+
+	# Get NPC's current position
+	var current_position: Vector3 = global_position
+	print("Current NPC position: ", current_position)
+
+	# Generate a random point within max_distance
+	var random_offset: Vector3 = Vector3(
+		randf_range(-max_distance, max_distance),
+		0,
+		randf_range(-max_distance, max_distance)
+	)
+	var target_position: Vector3 = current_position + random_offset
+	print("Generated random target: ", target_position)
+
+	# Find the closest point on the navigation mesh
+	var closest_point: Vector3 = NavigationServer3D.map_get_closest_point(nav_map, target_position)
+	print("Closest point on nav mesh: ", closest_point)
+
+	# Set the target position for the navigation agent
+	nav_agent.set_target_position(closest_point)
+	print("Target set: ", closest_point, " | Reachable: ", nav_agent.is_target_reachable())
