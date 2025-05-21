@@ -5,6 +5,7 @@ extends Node
 @onready var pause_menu: PanelContainer = $Menu/PauseMenu
 @onready var address_entry: LineEdit = %AddressEntry
 @onready var menu_music: AudioStreamPlayer = %MenuMusic
+@export var npc_amount = 7
 
 const Player = preload("res://player.tscn")
 const Npc = preload("res://npc.tscn")
@@ -69,8 +70,8 @@ func _on_host_button_pressed() -> void:
 		options_menu.hide()
 
 	add_player(multiplayer.get_unique_id())
-	add_npc()
-	add_npc()
+	for i in npc_amount:
+		add_npc()
 	upnp_setup()
 
 func _on_join_button_pressed() -> void:
@@ -107,7 +108,7 @@ func remove_player(peer_id: int) -> void:
 
 func add_npc():
 	var npc: Node = Npc.instantiate()
-	add_child(npc)
+	add_child(npc, true)
 
 func upnp_setup() -> void:
 	var upnp: UPNP = UPNP.new()
