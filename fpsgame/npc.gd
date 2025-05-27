@@ -4,6 +4,7 @@ extends CharacterBody3D
 @export var max_distance: float = 50.0  # Maximum distance for random points
 @export var wait_time: float = 2.0  # Time to wait before picking a new point
 @export var gravity: float = 9.8  # Gravity value (default for Godot physics)
+@export var health: int = 1
 @export var spawns: PackedVector3Array = ([
 	Vector3(-10, 0.2, 10),
 	Vector3(10, 0.2, 10),
@@ -91,3 +92,10 @@ func set_random_target() -> void:
 	# Set the target position for the navigation agent
 	nav_agent.set_target_position(closest_point)
 	print("Target set: ", closest_point, " | Reachable: ", nav_agent.is_target_reachable())
+
+@rpc("any_peer")
+func recieve_damage(damage:= 1) -> void:
+	health -= damage
+	if health <= 0:
+		health = 2
+		queue_free()
