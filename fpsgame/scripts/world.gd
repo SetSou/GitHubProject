@@ -54,7 +54,6 @@ func _on_back_pressed() -> void:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 		options = false
 
-#func _ready() -> void:
 func _on_host_button_pressed() -> void:
 	main_menu.hide()
 	$Menu/DollyCamera.hide()
@@ -99,7 +98,9 @@ func _on_music_toggle_toggled(toggled_on: bool) -> void:
 func add_player(peer_id: int) -> void:
 	var player: Node = Player.instantiate()
 	player.name = str(peer_id)
+	player.set_multiplayer_authority(peer_id)
 	add_child(player)
+	print("Player spawned with peer ID: ", peer_id)
 
 func remove_player(peer_id: int) -> void:
 	var player: Node = get_node_or_null(str(peer_id))
@@ -107,15 +108,15 @@ func remove_player(peer_id: int) -> void:
 		player.queue_free()
 
 func add_npc():
+	if not multiplayer.is_server():
+		return
 	var npc: Node = Npc.instantiate()
 	add_child(npc, true)
 
 func upnp_setup() -> void:
 	var upnp: UPNP = UPNP.new()
-
 	upnp.discover()
 	upnp.add_port_mapping(PORT)
-
 	var ip: String = upnp.query_external_address()
 	if ip == "":
 		print("Failed to establish upnp connection!")

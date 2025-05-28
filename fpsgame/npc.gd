@@ -11,26 +11,48 @@ extends CharacterBody3D
 	Vector3(10, 0.2, -10),
 	Vector3(-10, 0.2, -10),
 ])
+# Predefined set of colors for the NPC
+@export var possible_colors: Array[Color] = [
+	Color.RED,
+	Color.BLUE,
+	Color.GREEN,
+	Color.YELLOW,
+	Color.PURPLE,
+	Color.CYAN,
+	Color.ORANGE
+]
 @onready var nav_agent: NavigationAgent3D = $NavigationAgent3D  # Reference to NavigationAgent3D
+@onready var mesh_instance: MeshInstance3D = $MeshInstance3D  # Reference to MeshInstance3D
+@onready var synchronizer: MultiplayerSynchronizer = $MultiplayerSynchronizer  # Reference to MultiplayerSynchronizer
 var time_since_last_target: float = 0.0
+# Synced property for NPC color
+@export var npc_color: Color = Color.WHITE : set = _set_npc_color
 
 func _ready() -> void:
 	if not multiplayer.is_server():
 		return
+	set_multiplayer_authority(multiplayer.get_unique_id()) # Set to server (peer ID 1)
 	position = spawns[randi() % spawns.size()]
-	# Ensure the navigation agent is set up
 	if nav_agent == null:
 		print("ERROR: NavigationAgent3D not found! Check node setup.")
+		return
+	if mesh_instance == null:
+		print("ERROR: MeshInstance3D not found! Check node setup.")
+		return
+	if synchronizer == null:
+		print("ERROR: MultiplayerSynchronizer not found! Check node setup.")
 		return
 	nav_agent.path_desired_distance = 0.5
 	nav_agent.target_desired_distance = 0.5
 	print("NavigationAgent3D initialized. Current position: ", global_position)
-	# Pick initial random target
+	# Set random color on server
+	npc_color = possible_colors[randi() % possible_colors.size()]
 	set_random_target()
 
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
-		return# Apply gravity if not on the floor
+		return
+	# Apply gravity if not on the floor
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 	else:
@@ -93,9 +115,29 @@ func set_random_target() -> void:
 	nav_agent.set_target_position(closest_point)
 	print("Target set: ", closest_point, " | Reachable: ", nav_agent.is_target_reachable())
 
-@rpc("any_peer")
-func recieve_damage(damage:= 1) -> void:
+func _set_npc_color(new_color: Color) -> void:
+	npc_color = new_color
+	# Apply color to the mesh
+	if mesh_instance:
+		var material = mesh_instance.get_surface_override_material(0)
+		if material == null:
+			material = StandardMaterial3D.new()
+			mesh_instance.set_surface_override_material(0, material)
+		material.albedo_color = new_color
+		print("NPC color set to: ", new_color, " at position: ", global_position)
+
+@rpc("any_peer", "call_local")
+func recieve_damage(damage: int = 1) -> void:
+	if not multiplayer.is_server():
+		return
 	health -= damage
+	print("NPC hit! Health: ", health, " | Peer: ", multiplayer.get_remote_sender_id())
 	if health <= 0:
 		health = 2
-		queue_free()
+		print("NPC health <= 0, removing NPC at position: ", global_position)
+		destroy_npc.rpc()
+		destroy_npc()
+
+@rpc("call_local")
+func destroy_npc() -> void:
+	super.queue_free()
