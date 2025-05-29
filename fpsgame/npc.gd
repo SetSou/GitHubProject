@@ -79,7 +79,7 @@ func _physics_process(delta: float) -> void:
 	# Move only in XZ plane for navigation
 	velocity.x = direction.x * speed
 	velocity.z = direction.z * speed
-	print("Current position: ", global_position, " | Next path position: ", next_position, " | Velocity: ", velocity)
+	#print("Current position: ", global_position, " | Next path position: ", next_position, " | Velocity: ", velocity)
 
 	# Move the CharacterBody3D
 	var collision = move_and_slide()
@@ -124,7 +124,7 @@ func _set_npc_color(new_color: Color) -> void:
 			material = StandardMaterial3D.new()
 			mesh_instance.set_surface_override_material(0, material)
 		material.albedo_color = new_color
-		print("NPC color set to: ", new_color, " at position: ", global_position)
+		#print("NPC color set to: ", new_color, " at position: ", global_position)
 
 @rpc("any_peer", "call_local")
 func recieve_damage(damage: int = 1) -> void:
