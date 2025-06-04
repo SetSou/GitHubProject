@@ -58,12 +58,8 @@ func _ready() -> void:
 		print("ERROR: MultiplayerSynchronizer not found! Check node setup for peer: ", multiplayer.get_unique_id())
 		return
 	
-	if multiplayer.is_server():
-		player_color = possible_colors[randi() % possible_colors.size()]
-		_set_player_color(player_color)
-		print("Server assigned color: ", player_color, " for peer: ", multiplayer.get_unique_id())
-	else:
-		request_color_from_server.rpc_id(1)
+	# Always assign a random color immediately for all players
+	assign_random_color()
 
 func _process(_delta: float) -> void:
 	sensitivity = Global.sensitivity
@@ -140,10 +136,16 @@ func recieve_damage(damage: int = 1) -> void:
 	if health <= 0:
 		health = 2
 		position = spawns[randi() % spawns.size()]
-		if multiplayer.is_server():
-			player_color = possible_colors[randi() % possible_colors.size()]
-			_set_player_color(player_color)
-			print("Server assigned respawn color: ", player_color, " for peer: ", multiplayer.get_unique_id())
+		assign_random_color()
+
+func assign_random_color() -> void:
+	# Only the authority (owner) of this player should assign colors
+	if not is_multiplayer_authority():
+		return
+	var new_color = possible_colors[randi() % possible_colors.size()]
+	player_color = new_color
+	_set_player_color(new_color)
+	print("Assigned color: ", new_color, " for peer: ", multiplayer.get_unique_id())
 
 func _set_player_color(new_color: Color) -> void:
 	player_color = new_color
@@ -156,23 +158,3 @@ func _set_player_color(new_color: Color) -> void:
 		print("Player color set to: ", new_color, " for peer: ", multiplayer.get_unique_id())
 	else:
 		print("ERROR: MeshInstance3D is null for peer: ", multiplayer.get_unique_id())
-
-@rpc("any_peer")
-func request_color_from_server() -> void:
-	if not multiplayer.is_server():
-		return
-	var peer_id = multiplayer.get_remote_sender_id()
-	var player_path = "/root/Main/" + str(peer_id)
-	var player = get_node_or_null(player_path)
-	if player:
-		var new_color = possible_colors[randi() % possible_colors.size()]
-		player.player_color = new_color
-		player.set_color_from_server.rpc_id(peer_id, new_color)
-		print("Server assigned color: ", new_color, " for peer: ", peer_id, " at path: ", player_path)
-	else:
-		print("ERROR: Player node not found for peer: ", peer_id, " at path: ", player_path)
-
-@rpc("authority", "call_local")
-func set_color_from_server(new_color: Color) -> void:
-	player_color = new_color
-	_set_player_color(new_color)
