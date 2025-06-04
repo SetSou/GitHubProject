@@ -136,8 +136,6 @@ func play_shoot_effects() -> void:
 
 @rpc("any_peer", "call_local")
 func recieve_damage(damage: int = 1) -> void:
-	if not multiplayer.is_server():
-		return
 	health -= damage
 	if health <= 0:
 		health = 2
