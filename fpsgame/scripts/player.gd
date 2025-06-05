@@ -9,7 +9,7 @@ extends CharacterBody3D
 @onready var synchronizer: MultiplayerSynchronizer = $MultiplayerSynchronizer
 
 ## Number of shots before a player dies
-@export var health: int = 2
+@export var health: int = 1
 ## The xyz position of the random spawns
 @export var spawns: PackedVector3Array = ([
 	Vector3(-18, 0.2, 0),
@@ -31,14 +31,17 @@ extends CharacterBody3D
 	Color.ORANGE
 ]
 ## Synced property for player color
-var player_color: Color = Color.WHITE : set = _set_player_color
+@export var player_color: Color = Color.WHITE : set = _set_player_color
+
+# Local variable to track if this player should have a gun visible
+var has_gun_visible: bool = true
 
 var sensitivity: float = 0.005
 var controller_sensitivity: float = 0.010
 var axis_vector: Vector2
 var mouse_captured: bool = true
 
-const SPEED = 5.5
+const SPEED = 5.0
 const JUMP_VELOCITY = 4.5
 
 func _enter_tree() -> void:
@@ -58,8 +61,9 @@ func _ready() -> void:
 		print("ERROR: MultiplayerSynchronizer not found! Check node setup for peer: ", multiplayer.get_unique_id())
 		return
 	
-	# Always assign a random color immediately for all players
-	assign_random_color()
+	# Delay the setup to ensure everything is properly initialized
+	await get_tree().process_frame
+	setup_player_role()
 
 func _process(_delta: float) -> void:
 	sensitivity = Global.sensitivity
@@ -78,7 +82,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.rotate_x(-event.relative.y * sensitivity)
 		camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
 
-	if Input.is_action_just_pressed("shoot") and anim_player.current_animation != "shoot":
+	if Input.is_action_just_pressed("shoot") and anim_player.current_animation != "shoot" and has_gun():
 		play_shoot_effects.rpc()
 		gunshot_sound.play()
 		if raycast.is_colliding():
@@ -136,6 +140,36 @@ func recieve_damage(damage: int = 1) -> void:
 	if health <= 0:
 		health = 2
 		position = spawns[randi() % spawns.size()]
+		assign_player_color()
+
+func setup_player_role() -> void:
+	if not is_multiplayer_authority():
+		return
+	
+	if multiplayer.is_server():
+		# Host gets specific color (RED) and keeps gun visible
+		player_color = Color.RED
+		_set_player_color(Color.RED)
+		has_gun_visible = true
+		print("Host assigned RED color and gun for peer: ", multiplayer.get_unique_id())
+	else:
+		# Client gets random color and NO gun visible
+		assign_random_color()
+		has_gun_visible = false
+		# Tell everyone to hide this player's gun
+		set_gun_visibility.rpc(false)
+		print("Client assigned no gun for peer: ", multiplayer.get_unique_id())
+
+func assign_player_color() -> void:
+	if not is_multiplayer_authority():
+		return
+	
+	if multiplayer.is_server():
+		# Host always gets RED
+		player_color = Color.RED
+		_set_player_color(Color.RED)
+	else:
+		# Client gets random color
 		assign_random_color()
 
 func assign_random_color() -> void:
@@ -146,6 +180,22 @@ func assign_random_color() -> void:
 	player_color = new_color
 	_set_player_color(new_color)
 	print("Assigned color: ", new_color, " for peer: ", multiplayer.get_unique_id())
+
+func has_gun() -> bool:
+	# Only the host (server) has a gun and can shoot
+	return multiplayer.is_server() and is_multiplayer_authority()
+
+@rpc("any_peer", "call_local")
+func set_gun_visibility(visible: bool) -> void:
+	has_gun_visible = visible
+	var pistol = camera.get_node_or_null("pistol")
+	if pistol:
+		pistol.visible = visible
+		print("Gun visibility set to: ", visible, " for peer: ", multiplayer.get_unique_id())
+
+func hide_gun() -> void:
+	# Hide the gun for clients
+	set_gun_visibility.rpc(false)
 
 func _set_player_color(new_color: Color) -> void:
 	player_color = new_color
