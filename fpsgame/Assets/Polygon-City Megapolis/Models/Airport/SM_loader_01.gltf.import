@@ -1,0 +1,103 @@
+[remap]
+
+importer="scene"
+importer_version=1
+type="PackedScene"
+uid="uid://br5vqitw7dy25"
+path="res://.godot/imported/SM_loader_01.gltf-a76630380635e4097e53d925a9482d83.scn"
+
+[deps]
+
+source_file="res://Assets/Polygon-City Megapolis/Models/Airport/SM_loader_01.gltf"
+dest_files=["res://.godot/imported/SM_loader_01.gltf-a76630380635e4097e53d925a9482d83.scn"]
+
+[params]
+
+nodes/root_type="Node3D"
+nodes/root_name=""
+nodes/apply_root_scale=true
+nodes/root_scale=0.4
+nodes/import_as_skeleton_bones=false
+nodes/use_node_type_suffixes=true
+meshes/ensure_tangents=1
+meshes/generate_lods=true
+meshes/create_shadow_meshes=false
+meshes/light_baking=2
+meshes/lightmap_texel_size=0.2
+meshes/force_disable_compression=false
+skins/use_named_skins=true
+animation/import=true
+animation/fps=24.0
+animation/trimming=false
+animation/remove_immutable_tracks=false
+animation/import_rest_as_RESET=false
+import_script/path=""
+_subresources={
+"animations": {},
+"materials": {},
+"meshes": {
+"Cube001": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube001.mesh"
+},
+"Cube002": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube002.mesh"
+},
+"Cube003": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube003.mesh"
+},
+"Cube004": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube004.mesh"
+},
+"Root Scene_Cube001": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube001.mesh"
+},
+"Root Scene_Cube002": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube002.mesh"
+},
+"Root Scene_Cube003": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube003.mesh"
+},
+"Root Scene_Cube004": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.Cube004.mesh"
+},
+"Root Scene_loader_01": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.loader_01.mesh"
+},
+"loader_01": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-City Megapolis/Models/Airport/extracted/SM_loader_01.loader_01.mesh"
+}
+},
+"nodes": {
+"PATH:AnimationPlayer": {
+"optimizer/enabled": true,
+"optimizer/max_angular_error": 0.00277778,
+"optimizer/max_linear_error": 0.5
+}
+}
+}
+gltf/naming_version=0
+gltf/embedded_image_handling=1
