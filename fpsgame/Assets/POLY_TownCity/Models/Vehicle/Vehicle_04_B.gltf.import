@@ -1,0 +1,183 @@
+[remap]
+
+importer="scene"
+importer_version=1
+type="PackedScene"
+uid="uid://2jwuih843g2q"
+valid=false
+
+[deps]
+
+source_file="res://Assets/POLY_TownCity/Models/Vehicle/Vehicle_04_B.gltf"
+
+[params]
+
+nodes/root_type="Node3D"
+nodes/root_name=""
+nodes/apply_root_scale=true
+nodes/root_scale=0.8
+nodes/import_as_skeleton_bones=false
+nodes/use_node_type_suffixes=true
+meshes/ensure_tangents=1
+meshes/generate_lods=true
+meshes/create_shadow_meshes=false
+meshes/light_baking=1
+meshes/lightmap_texel_size=0.2
+meshes/force_disable_compression=false
+skins/use_named_skins=true
+animation/import=false
+animation/fps=24.0
+animation/trimming=false
+animation/remove_immutable_tracks=false
+animation/import_rest_as_RESET=false
+import_script/path=""
+_subresources={
+"animations": {},
+"materials": {},
+"meshes": {
+"Back_Doors_01": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Back_Doors_01.mesh"
+},
+"Back_Doors_02": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Back_Doors_02.mesh"
+},
+"Front_Doors_01": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Front_Doors_01.mesh"
+},
+"Front_Doors_02": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Front_Doors_02.mesh"
+},
+"Root Scene_Back_Doors_01": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Back_Doors_01.mesh"
+},
+"Root Scene_Back_Doors_02": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Back_Doors_02.mesh"
+},
+"Root Scene_Front_Doors_01": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Front_Doors_01.mesh"
+},
+"Root Scene_Front_Doors_02": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Front_Doors_02.mesh"
+},
+"Root Scene_Vehicle_04_A": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Vehicle_04_A.mesh"
+},
+"Root Scene_Wheels_01": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Wheels_01.mesh"
+},
+"Root Scene_Wheels_04": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Wheels_04.mesh"
+},
+"Root Scene_whels_02": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.whels_02.mesh"
+},
+"Root Scene_whels_03": {
+"generate/lightmap_uv": 0,
+"generate/lods": 0,
+"generate/shadow_meshes": 0,
+"lods/normal_merge_angle": 60.0,
+"lods/normal_split_angle": 25.0,
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.whels_03.mesh"
+},
+"Vehicle_04_A": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Vehicle_04_A.mesh"
+},
+"Wheels_01": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Wheels_01.mesh"
+},
+"Wheels_04": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.Wheels_04.mesh"
+},
+"whels_02": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.whels_02.mesh"
+},
+"whels_03": {
+"save_to_file/enabled": true,
+"save_to_file/make_streamable": "",
+"save_to_file/path": "res://Assets/Polygon-Town City/Models/Vehicle/extracted/Vehicle_04_B.whels_03.mesh"
+}
+},
+"nodes": {
+"PATH:AnimationPlayer": {
+"optimizer/enabled": true,
+"optimizer/max_angular_error": 0.00277778,
+"optimizer/max_linear_error": 0.5
+}
+}
+}
+gltf/naming_version=0
+gltf/embedded_image_handling=1

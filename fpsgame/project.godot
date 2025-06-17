@@ -12,7 +12,7 @@ config_version=5
 
 config/name="FPSGame"
 config/tags=PackedStringArray("fps", "gamepad", "menu", "multiplayer")
-run/main_scene="res://world.tscn"
+run/main_scene="res://Scenes/world.tscn"
 config/features=PackedStringArray("4.4", "Forward Plus")
 config/icon="res://icon.svg"
 

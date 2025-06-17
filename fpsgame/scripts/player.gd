@@ -11,14 +11,25 @@ extends CharacterBody3D
 ## Number of shots before a player dies
 @export var health: int = 1
 ## The xyz position of the random spawns
+##old spawns
+#@export var spawns: PackedVector3Array = ([ 
+	#Vector3(-18, 0.2, 0),
+	#Vector3(18, 0.2, 0),
+	#Vector3(-2.8, 0.2, -6),
+	#Vector3(-17, 0, 17),
+	#Vector3(17, 0, 17),
+	#Vector3(17, 0, -17),
+	#Vector3(-17, 0, -17)
+#])
 @export var spawns: PackedVector3Array = ([
-	Vector3(-18, 0.2, 0),
-	Vector3(18, 0.2, 0),
-	Vector3(-2.8, 0.2, -6),
-	Vector3(-17, 0, 17),
-	Vector3(17, 0, 17),
-	Vector3(17, 0, -17),
-	Vector3(-17, 0, -17)
+	Vector3(3, -1.5, -7.5),
+	Vector3(6, -1.5, -7.5),
+	Vector3(9, -1.5, -7.5),
+	Vector3(12, -1.5, -7.5),
+	Vector3(-3, -1.5, -7.5),
+	Vector3(-6, -1.5, -7.5),
+	Vector3(-9, -1.5, -7.5),
+	Vector3(-12, -1.5, -7.5),
 ])
 ## Predefined set of colors for the player
 @export var possible_colors: Array[Color] = [

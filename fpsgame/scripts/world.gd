@@ -7,8 +7,8 @@ extends Node
 @onready var menu_music: AudioStreamPlayer = %MenuMusic
 @export var npc_amount = 10
 
-const Player = preload("res://player.tscn")
-const Npc = preload("res://npc.tscn")
+const Player = preload("res://Scenes/player.tscn")
+const Npc = preload("res://Scenes/npc.tscn")
 const PORT = 9999
 var enet_peer: ENetMultiplayerPeer = ENetMultiplayerPeer.new()
 var paused: bool = false
