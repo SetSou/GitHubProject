@@ -5,22 +5,14 @@ extends CharacterBody3D
 @export var wait_time: float = 2.0  # Time to wait before picking a new point
 @export var gravity: float = 9.8  # Gravity value (default for Godot physics)
 @export var health: int = 1
-#@export var spawns: PackedVector3Array = ([
-	#Vector3(-10, 0.2, 10),
-	#Vector3(10, 0.2, 10),
-	#Vector3(10, 0.2, -10),
-	#Vector3(-10, 0.2, -10),
-#])
-@export var spawns: PackedVector3Array = ([
-	Vector3(3, -1.5, -7.5),
-	Vector3(6, -1.5, -7.5),
-	Vector3(9, -1.5, -7.5),
-	Vector3(12, -1.5, -7.5),
-	Vector3(-3, -1.5, -7.5),
-	Vector3(-6, -1.5, -7.5),
-	Vector3(-9, -1.5, -7.5),
-	Vector3(-12, -1.5, -7.5),
-])
+
+## Reference to the NavigationRegion3D node in the scene
+@export var navigation_region: NavigationRegion3D
+## Maximum attempts to find a valid spawn point
+@export var max_spawn_attempts: int = 50
+## Minimum distance from other NPCs when spawning
+@export var min_spawn_distance: float = 3.0
+
 # Predefined set of colors for the NPC
 @export var possible_colors: Array[Color] = [
 	Color.RED,
@@ -42,7 +34,14 @@ func _ready() -> void:
 	if not multiplayer.is_server():
 		return
 	set_multiplayer_authority(multiplayer.get_unique_id()) # Set to server (peer ID 1)
-	position = spawns[randi() % spawns.size()]
+	
+	# Try to find NavigationRegion3D if not assigned
+	if navigation_region == null:
+		navigation_region = find_navigation_region()
+	
+	# Set initial spawn position using NavMesh
+	position = get_random_nav_position()
+	
 	if nav_agent == null:
 		print("ERROR: NavigationAgent3D not found! Check node setup.")
 		return
@@ -58,6 +57,73 @@ func _ready() -> void:
 	# Set random color on server
 	npc_color = possible_colors[randi() % possible_colors.size()]
 	set_random_target()
+
+func find_navigation_region() -> NavigationRegion3D:
+	# Try to find NavigationRegion3D in the scene
+	var nav_region = get_tree().get_first_node_in_group("navigation")
+	if nav_region and nav_region is NavigationRegion3D:
+		return nav_region
+	
+	# Alternative: search in the scene tree
+	var root = get_tree().current_scene
+	return find_node_of_navigation_type(root) as NavigationRegion3D
+
+func find_node_of_navigation_type(node: Node) -> Node:
+	if node is NavigationRegion3D:
+		return node
+	for child in node.get_children():
+		var result = find_node_of_navigation_type(child)
+		if result:
+			return result
+	return null
+
+func get_random_nav_position() -> Vector3:
+	if navigation_region == null:
+		print("WARNING: No NavigationRegion3D found! Using fallback position.")
+		return Vector3.ZERO
+	
+	var nav_map = navigation_region.get_navigation_map()
+	if nav_map == RID():
+		print("WARNING: Navigation map not ready! Using fallback position.")
+		return Vector3.ZERO
+	
+	# Get the AABB of the navigation mesh
+	var nav_mesh = navigation_region.navigation_mesh
+	if nav_mesh == null:
+		print("WARNING: No navigation mesh found! Using fallback position.")
+		return Vector3.ZERO
+	
+	# Try multiple attempts to find a valid position
+	for attempt in max_spawn_attempts:
+		var random_pos = get_random_position_in_bounds()
+		var closest_point = NavigationServer3D.map_get_closest_point(nav_map, random_pos)
+		
+		# Check if the point is valid and not too close to other NPCs
+		if is_valid_spawn_position(closest_point):
+			return closest_point
+	
+	print("WARNING: Could not find valid spawn position after ", max_spawn_attempts, " attempts. Using fallback.")
+	return Vector3.ZERO
+
+func get_random_position_in_bounds() -> Vector3:
+	# Generate a random position within reasonable bounds
+	# You may want to adjust these bounds based on your level size
+	var bounds_size = Vector3(20, 5, 20)  # Adjust based on your level
+	var bounds_center = Vector3.ZERO      # Adjust based on your level center
+	
+	return Vector3(
+		bounds_center.x + randf_range(-bounds_size.x, bounds_size.x),
+		bounds_center.y + randf_range(-bounds_size.y, bounds_size.y),
+		bounds_center.z + randf_range(-bounds_size.z, bounds_size.z)
+	)
+
+func is_valid_spawn_position(pos: Vector3) -> bool:
+	# Check if position is far enough from other NPCs
+	var npcs = get_tree().get_nodes_in_group("npcs")
+	for npc in npcs:
+		if npc != self and npc.global_position.distance_to(pos) < min_spawn_distance:
+			return false
+	return true
 
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
