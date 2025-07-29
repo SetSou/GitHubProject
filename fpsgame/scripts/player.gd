@@ -10,13 +10,6 @@ extends CharacterBody3D
 
 ## Number of shots before a player dies
 @export var health: int = 1
-## Reference to the NavigationRegion3D node in the scene
-@export var navigation_region: NavigationRegion3D
-## Maximum attempts to find a valid spawn point
-@export var max_spawn_attempts: int = 50
-## Minimum distance from other players when spawning
-@export var min_spawn_distance: float = 3.0
-
 ## Predefined set of colors for the player
 @export var possible_colors: Array[Color] = [
 	Color.RED,
@@ -29,6 +22,9 @@ extends CharacterBody3D
 ]
 ## Synced property for player color
 @export var player_color: Color = Color.WHITE : set = _set_player_color
+
+# Array to store spawn positions from SpawnPoint nodes
+var spawn_positions: Array[Vector3] = []
 
 # Local variable to track if this player should have a gun visible
 var has_gun_visible: bool = true
@@ -45,17 +41,20 @@ func _enter_tree() -> void:
 	set_multiplayer_authority(str(name).to_int())
 
 func _ready() -> void:
+	# Collect spawn positions from SpawnPoint nodes
+	_collect_spawn_positions()
+	
 	if not is_multiplayer_authority():
 		return
 	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 	camera.current = true
 	
-	# Try to find NavigationRegion3D if not assigned
-	if navigation_region == null:
-		navigation_region = find_navigation_region()
-	
-	# Set initial spawn position
-	position = get_random_nav_position()
+	# Use collected spawn positions for initial spawn
+	if spawn_positions.size() > 0:
+		position = spawn_positions[randi() % spawn_positions.size()]
+	else:
+		print("WARNING: No SpawnPoint nodes found in group 'SpawnPoint'. Using default position.")
+		position = Vector3.ZERO
 	
 	if mesh_instance == null:
 		print("ERROR: MeshInstance3D not found! Check node setup for peer: ", multiplayer.get_unique_id())
@@ -68,72 +67,28 @@ func _ready() -> void:
 	await get_tree().process_frame
 	setup_player_role()
 
-func find_navigation_region() -> NavigationRegion3D:
-	# Try to find NavigationRegion3D in the scene
-	var nav_region = get_tree().get_first_node_in_group("navigation")
-	if nav_region and nav_region is NavigationRegion3D:
-		return nav_region
+func _collect_spawn_positions() -> void:
+	spawn_positions.clear()
+	var spawn_nodes = get_tree().get_nodes_in_group("SpawnPoint")
 	
-	# Alternative: search in the scene tree
-	var root = get_tree().current_scene
-	return find_node_of_type(root, NavigationRegion3D) as NavigationRegion3D
+	if spawn_nodes.size() == 0:
+		print("WARNING: No nodes found in group 'SpawnPoint'. Make sure you have Node3D nodes added to the 'SpawnPoint' group.")
+		return
+	
+	for node in spawn_nodes:
+		if node is Node3D:
+			spawn_positions.append(node.global_position)
+			print("Added spawn position: ", node.global_position)
+		else:
+			print("WARNING: Node ", node.name, " in SpawnPoint group is not a Node3D")
+	
+	print("Total spawn positions collected: ", spawn_positions.size())
 
-func find_node_of_type(node: Node, node_type) -> Node:
-	if node is NavigationRegion3D:
-		return node
-	for child in node.get_children():
-		var result = find_node_of_type(child, node_type)
-		if result:
-			return result
-	return null
-
-func get_random_nav_position() -> Vector3:
-	if navigation_region == null:
-		print("WARNING: No NavigationRegion3D found! Using fallback position.")
+func get_random_spawn_position() -> Vector3:
+	if spawn_positions.size() == 0:
+		print("ERROR: No spawn positions available. Using Vector3.ZERO")
 		return Vector3.ZERO
-	
-	var nav_map = navigation_region.get_navigation_map()
-	if nav_map == RID():
-		print("WARNING: Navigation map not ready! Using fallback position.")
-		return Vector3.ZERO
-	
-	# Get the AABB of the navigation mesh
-	var nav_mesh = navigation_region.navigation_mesh
-	if nav_mesh == null:
-		print("WARNING: No navigation mesh found! Using fallback position.")
-		return Vector3.ZERO
-	
-	# Try multiple attempts to find a valid position
-	for attempt in max_spawn_attempts:
-		var random_pos = get_random_position_in_bounds()
-		var closest_point = NavigationServer3D.map_get_closest_point(nav_map, random_pos)
-		
-		# Check if the point is valid and not too close to other players
-		if is_valid_spawn_position(closest_point):
-			return closest_point
-	
-	print("WARNING: Could not find valid spawn position after ", max_spawn_attempts, " attempts. Using fallback.")
-	return Vector3.ZERO
-
-func get_random_position_in_bounds() -> Vector3:
-	# Generate a random position within reasonable bounds
-	# You may want to adjust these bounds based on your level size
-	var bounds_size = Vector3(20, 5, 20)  # Adjust based on your level
-	var bounds_center = Vector3.ZERO      # Adjust based on your level center
-	
-	return Vector3(
-		bounds_center.x + randf_range(-bounds_size.x, bounds_size.x),
-		bounds_center.y + randf_range(-bounds_size.y, bounds_size.y),
-		bounds_center.z + randf_range(-bounds_size.z, bounds_size.z)
-	)
-
-func is_valid_spawn_position(pos: Vector3) -> bool:
-	# Check if position is far enough from other players
-	var players = get_tree().get_nodes_in_group("players")
-	for player in players:
-		if player != self and player.global_position.distance_to(pos) < min_spawn_distance:
-			return false
-	return true
+	return spawn_positions[randi() % spawn_positions.size()]
 
 func _process(_delta: float) -> void:
 	sensitivity = Global.sensitivity
@@ -209,7 +164,7 @@ func recieve_damage(damage: int = 1) -> void:
 	health -= damage
 	if health <= 0:
 		health = 2
-		position = get_random_nav_position()  # Use random nav position instead of spawns array
+		position = get_random_spawn_position()
 		assign_player_color()
 
 func setup_player_role() -> void:

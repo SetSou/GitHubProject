@@ -5,7 +5,8 @@ extends Node
 @onready var pause_menu: PanelContainer = $Menu/PauseMenu
 @onready var address_entry: LineEdit = %AddressEntry
 @onready var menu_music: AudioStreamPlayer = %MenuMusic
-@export var npc_amount = 50
+@export var npc_amount = 60
+
 
 const Player = preload("res://Scenes/player.tscn")
 const Npc = preload("res://Scenes/npc.tscn")
