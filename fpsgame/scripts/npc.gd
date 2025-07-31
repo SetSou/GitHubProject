@@ -6,16 +6,6 @@ extends CharacterBody3D
 @export var gravity: float = 9.8  # Gravity value (default for Godot physics)
 @export var health: int = 1
 
-@export var spawns: PackedVector3Array = ([
-	Vector3(3, -1.5, -7.5),
-	Vector3(6, -1.5, -7.5),
-	Vector3(9, -1.5, -7.5),
-	Vector3(12, -1.5, -7.5),
-	Vector3(-3, -1.5, -7.5),
-	Vector3(-6, -1.5, -7.5),
-	Vector3(-9, -1.5, -7.5),
-	Vector3(-12, -1.5, -7.5),
-])
 # Predefined set of colors for the NPC
 @export var possible_colors: Array[Color] = [
 	Color.RED,
@@ -26,18 +16,33 @@ extends CharacterBody3D
 	Color.CYAN,
 	Color.ORANGE
 ]
+
 @onready var nav_agent: NavigationAgent3D = $NavigationAgent3D  # Reference to NavigationAgent3D
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D  # Reference to MeshInstance3D
 @onready var synchronizer: MultiplayerSynchronizer = $MultiplayerSynchronizer  # Reference to MultiplayerSynchronizer
+
+# Array to store spawn positions from SpawnPoint nodes
+var spawn_positions: Array[Vector3] = []
 var time_since_last_target: float = 0.0
+
 # Synced property for NPC color
 @export var npc_color: Color = Color.WHITE : set = _set_npc_color
 
 func _ready() -> void:
+	# Collect spawn positions from SpawnPoint nodes
+	_collect_spawn_positions()
+	
 	if not multiplayer.is_server():
 		return
 	set_multiplayer_authority(multiplayer.get_unique_id()) # Set to server (peer ID 1)
-	position = spawns[randi() % spawns.size()]
+	
+	# Use collected spawn positions for initial spawn
+	if spawn_positions.size() > 0:
+		position = spawn_positions[randi() % spawn_positions.size()]
+	else:
+		print("WARNING: No SpawnPoint nodes found in group 'SpawnPoint'. Using default position.")
+		position = Vector3.ZERO
+	
 	if nav_agent == null:
 		print("ERROR: NavigationAgent3D not found! Check node setup.")
 		return
@@ -53,6 +58,29 @@ func _ready() -> void:
 	# Set random color on server
 	npc_color = possible_colors[randi() % possible_colors.size()]
 	set_random_target()
+
+func _collect_spawn_positions() -> void:
+	spawn_positions.clear()
+	var spawn_nodes = get_tree().get_nodes_in_group("SpawnPoint")
+	
+	if spawn_nodes.size() == 0:
+		print("WARNING: No nodes found in group 'SpawnPoint'. Make sure you have Node3D nodes added to the 'SpawnPoint' group.")
+		return
+	
+	for node in spawn_nodes:
+		if node is Node3D:
+			spawn_positions.append(node.global_position)
+			print("NPC: Added spawn position: ", node.global_position)
+		else:
+			print("WARNING: Node ", node.name, " in SpawnPoint group is not a Node3D")
+	
+	print("NPC: Total spawn positions collected: ", spawn_positions.size())
+
+func get_random_spawn_position() -> Vector3:
+	if spawn_positions.size() == 0:
+		print("ERROR: No spawn positions available for NPC. Using Vector3.ZERO")
+		return Vector3.ZERO
+	return spawn_positions[randi() % spawn_positions.size()]
 
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
@@ -142,6 +170,8 @@ func recieve_damage(damage: int = 1) -> void:
 		print("NPC health <= 0, removing NPC at position: ", global_position)
 		destroy_npc.rpc()
 		destroy_npc()
+		#position = get_random_spawn_position()
+		#set_random_target()
 
 @rpc("call_local")
 func destroy_npc() -> void:
