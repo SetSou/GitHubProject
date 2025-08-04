@@ -23,19 +23,28 @@ extends CharacterBody3D
 ## Synced property for player color
 @export var player_color: Color = Color.WHITE : set = _set_player_color
 
+# Movement parameters - MUST match NPC values exactly
+const BASE_SPEED = 5.0  # Same as NPC speed
+const ACCELERATION = 15.0  # Same as NPC acceleration
+const DECELERATION = 20.0  # Same as NPC deceleration
+const JUMP_VELOCITY = 4.5
+const GRAVITY = 9.8  # Same as NPC gravity
+
 # Array to store spawn positions from SpawnPoint nodes
 var spawn_positions: Array[Vector3] = []
 
 # Local variable to track if this player should have a gun visible
 var has_gun_visible: bool = true
 
+# Movement state variables to match NPC behavior
+var current_velocity: Vector3 = Vector3.ZERO
+var speed_multiplier: float = 1.0
+var speed_variation: float = 0.4  # Same as NPC speed variation
+
 var sensitivity: float = 0.005
 var controller_sensitivity: float = 0.010
 var axis_vector: Vector2
 var mouse_captured: bool = true
-
-const SPEED = 5.0
-const JUMP_VELOCITY = 4.5
 
 func _enter_tree() -> void:
 	set_multiplayer_authority(str(name).to_int())
@@ -63,9 +72,17 @@ func _ready() -> void:
 		print("ERROR: MultiplayerSynchronizer not found! Check node setup for peer: ", multiplayer.get_unique_id())
 		return
 	
+	# Set random speed multiplier to match NPC variation
+	_randomize_movement_parameters()
+	
 	# Delay the setup to ensure everything is properly initialized
 	await get_tree().process_frame
 	setup_player_role()
+
+func _randomize_movement_parameters() -> void:
+	# Randomize speed to match NPC behavior exactly
+	speed_multiplier = randf_range(1.0 - speed_variation, 1.0 + speed_variation)
+	print("Player speed multiplier: ", speed_multiplier, " for peer: ", multiplayer.get_unique_id())
 
 func _collect_spawn_positions() -> void:
 	spawn_positions.clear()
@@ -132,24 +149,44 @@ func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer != null:
 		if not is_multiplayer_authority():
 			return
+	
+	# Apply gravity - same as NPCs
 	if not is_on_floor():
-		velocity += get_gravity() * delta
+		velocity.y -= GRAVITY * delta
+	else:
+		velocity.y = 0.0
+	
+	# Handle jumping
 	if Input.is_action_just_pressed("ui_accept") and is_on_floor():
 		velocity.y = JUMP_VELOCITY
+	
+	# Get input direction
 	var input_dir := Input.get_vector("left", "right", "up", "down")
-	var direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y))
-	if direction:
-		velocity.x = direction.x * SPEED
-		velocity.z = direction.z * SPEED
+	var direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
+	
+	# Calculate target velocity with speed variation (same as NPCs)
+	var target_velocity = Vector3.ZERO
+	if direction.length() > 0.1:
+		target_velocity = direction * BASE_SPEED * speed_multiplier
+	
+	# Apply acceleration/deceleration (same as NPCs)
+	if target_velocity.length() > 0.1:
+		current_velocity = current_velocity.move_toward(target_velocity, ACCELERATION * delta)
 	else:
-		velocity.x = move_toward(velocity.x, 0, SPEED)
-		velocity.z = move_toward(velocity.z, 0, SPEED)
+		current_velocity = current_velocity.move_toward(Vector3.ZERO, DECELERATION * delta)
+	
+	# Apply the calculated velocity
+	velocity.x = current_velocity.x
+	velocity.z = current_velocity.z
+	
+	# Handle animations
 	if anim_player.current_animation == "shoot":
 		pass
 	elif input_dir != Vector2.ZERO and is_on_floor():
 		anim_player.play("move")
 	else:
 		anim_player.play("idle")
+	
 	move_and_slide()
 
 @rpc("call_local")
@@ -163,9 +200,11 @@ func play_shoot_effects() -> void:
 func recieve_damage(damage: int = 1) -> void:
 	health -= damage
 	if health <= 0:
-		health = 2
+		health = 1
 		position = get_random_spawn_position()
 		assign_player_color()
+		# Randomize speed again on respawn to keep variation
+		_randomize_movement_parameters()
 
 func setup_player_role() -> void:
 	if not is_multiplayer_authority():
