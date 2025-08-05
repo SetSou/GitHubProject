@@ -12,7 +12,7 @@
 [ext_resource type="Script" uid="uid://dfcyc0ro0cd0n" path="res://scripts/ui/menu/pause/resume.gd" id="7_5cdyw"]
 [ext_resource type="Script" uid="uid://dx2c4dbo6faas" path="res://scripts/ui/menu/options/controller_sensitivity.gd" id="7_jhf7u"]
 [ext_resource type="Script" uid="uid://d0grywwjd7lp8" path="res://scripts/ui/menu/pause/quit.gd" id="9_ucmny"]
-[ext_resource type="PackedScene" uid="uid://cglpnqja8whhy" path="res://map_level_1.tscn" id="14_e0ngr"]
+[ext_resource type="PackedScene" uid="uid://cglpnqja8whhy" path="res://Scenes/map_level_1.tscn" id="14_e0ngr"]
 
 [sub_resource type="PhysicalSkyMaterial" id="PhysicalSkyMaterial_r06yd"]
 energy_multiplier = 1.25

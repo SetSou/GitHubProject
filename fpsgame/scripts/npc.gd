@@ -13,7 +13,10 @@ extends CharacterBody3D
 @export var stop_chance: float = 0.001  # Chance per frame to stop and look around
 @export var pause_duration_range: Vector2 = Vector2(0.5, 3.0)  # Random pause duration
 @export var movement_variation: float = 0.3  # How much to vary movement direction
-@export var speed_variation: float = 0.4  # Speed multiplier variation (0.6 to 1.4 of base speed)
+
+# NavMesh parameters
+@export var path_update_distance: float = 2.0  # How close to get before updating path
+@export var navmesh_sample_distance: float = 5.0  # How far to search for valid NavMesh points
 
 # Collision avoidance parameters
 @export var wall_check_distance: float = 2.0  # How far ahead to check for walls
@@ -33,6 +36,7 @@ extends CharacterBody3D
 
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var synchronizer: MultiplayerSynchronizer = $MultiplayerSynchronizer
+@onready var navigation_agent: NavigationAgent3D = $NavigationAgent3D
 
 # Movement state
 var target_direction: Vector3 = Vector3.ZERO
@@ -40,11 +44,14 @@ var current_velocity: Vector3 = Vector3.ZERO
 var is_paused: bool = false
 var pause_timer: float = 0.0
 var movement_timer: float = 0.0
-var current_speed_multiplier: float = 1.0
+
+# Navigation state
+var current_path: PackedVector3Array = PackedVector3Array()
+var path_index: int = 0
+var final_target: Vector3
 
 # Target selection
 var spawn_positions: Array[Vector3] = []
-var current_target: Vector3
 var target_reached_threshold: float = 2.0
 
 # Synced property for NPC color
@@ -52,6 +59,11 @@ var target_reached_threshold: float = 2.0
 
 func _ready() -> void:
 	_collect_spawn_positions()
+	
+	# Setup NavigationAgent3D
+	if navigation_agent:
+		# Wait for navigation map to be ready
+		call_deferred("_setup_navigation")
 	
 	if not multiplayer.is_server():
 		return
@@ -62,20 +74,32 @@ func _ready() -> void:
 	if spawn_positions.size() > 0:
 		position = spawn_positions[randi() % spawn_positions.size()]
 	else:
-		#print("WARNING: No SpawnPoint nodes found in group 'SpawnPoint'. Using default position.")
 		position = Vector3.ZERO
 	
 	if mesh_instance == null:
-		#print("ERROR: MeshInstance3D not found! Check node setup.")
 		return
 	if synchronizer == null:
-		#wprint("ERROR: MultiplayerSynchronizer not found! Check node setup.")
 		return
 	
 	# Set random color on server
 	npc_color = possible_colors[randi() % possible_colors.size()]
-	_pick_new_target()
-	_randomize_movement_parameters()
+
+func _setup_navigation() -> void:
+	if navigation_agent:
+		# Configure the navigation agent
+		navigation_agent.radius = 0.5
+		navigation_agent.height = 1.8
+		navigation_agent.path_desired_distance = 0.5
+		navigation_agent.target_desired_distance = 1.0
+		navigation_agent.path_max_distance = 100.0
+		
+		# Connect signals
+		navigation_agent.target_reached.connect(_on_target_reached)
+		navigation_agent.navigation_finished.connect(_on_navigation_finished)
+		
+		# Start navigation after a short delay to ensure everything is ready
+		await get_tree().process_frame
+		_pick_new_target()
 
 func _collect_spawn_positions() -> void:
 	spawn_positions.clear()
@@ -88,11 +112,6 @@ func _collect_spawn_positions() -> void:
 	for node in spawn_nodes:
 		if node is Node3D:
 			spawn_positions.append(node.global_position)
-
-func _randomize_movement_parameters() -> void:
-	# Randomize speed to make each NPC move slightly differently
-	current_speed_multiplier = randf_range(1.0 - speed_variation, 1.0 + speed_variation)
-	#print("NPC speed multiplier: ", current_speed_multiplier)
 
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
@@ -119,32 +138,38 @@ func _physics_process(delta: float) -> void:
 		_start_pause()
 		return
 	
-	# Check if we've reached our target
-	var distance_to_target = global_position.distance_to(current_target)
-	if distance_to_target < target_reached_threshold:
+	# Navigate using NavigationAgent3D
+	if navigation_agent and not navigation_agent.is_navigation_finished():
+		_navigate_to_target(delta)
+	else:
+		# Pick a new target if we've finished navigation
 		_pick_new_target()
-		return
 	
-	# Random direction changes (simulate human imprecision)
+	move_and_slide()
+
+func _navigate_to_target(delta: float) -> void:
+	# Get the next position from the navigation agent
+	var next_path_position = navigation_agent.get_next_path_position()
+	var current_agent_position = global_position
+	
+	# Calculate direction to next waypoint
+	var desired_direction = (next_path_position - current_agent_position).normalized()
+	
+	# Add human-like imprecision and variation
 	if randf() < direction_change_chance:
 		_add_movement_variation()
 	
-	# Update movement timer
-	movement_timer += delta
-	
-	# Calculate desired direction with some human-like imprecision
-	var desired_direction = (current_target - global_position).normalized()
 	desired_direction = _add_human_like_imprecision(desired_direction)
 	
-	# Apply collision avoidance
-	desired_direction = _apply_collision_avoidance(desired_direction)
+	# Apply some collision avoidance as backup (though NavMesh should handle most of this)
+	desired_direction = _apply_basic_collision_avoidance(desired_direction)
 	
-	# Update target direction with some smoothing
+	# Update target direction with smoothing
 	target_direction = target_direction.lerp(desired_direction, 3.0 * delta)
 	target_direction = target_direction.normalized()
 	
-	# Apply acceleration/deceleration
-	var target_velocity = target_direction * speed * current_speed_multiplier
+	# Apply acceleration/deceleration with consistent speed
+	var target_velocity = target_direction * speed
 	
 	if target_velocity.length() > 0.1:
 		current_velocity = current_velocity.move_toward(target_velocity, acceleration * delta)
@@ -154,62 +179,27 @@ func _physics_process(delta: float) -> void:
 	# Apply velocity
 	velocity.x = current_velocity.x
 	velocity.z = current_velocity.z
-	
-	move_and_slide()
 
-func _apply_collision_avoidance(desired_direction: Vector3) -> Vector3:
+func _apply_basic_collision_avoidance(desired_direction: Vector3) -> Vector3:
+	# Simplified collision avoidance as backup to NavMesh
 	var space_state = get_world_3d().direct_space_state
 	var avoidance_direction = Vector3.ZERO
 	
 	# Check for walls/obstacles ahead
-	var wall_check_start = global_position + Vector3(0, 0.5, 0)  # Check at chest height
+	var wall_check_start = global_position + Vector3(0, 0.5, 0)
 	var wall_check_end = wall_check_start + desired_direction * wall_check_distance
 	
 	var wall_query = PhysicsRayQueryParameters3D.create(wall_check_start, wall_check_end)
-	wall_query.exclude = [self]  # Don't collide with self
+	wall_query.exclude = [self]
 	var wall_result = space_state.intersect_ray(wall_query)
 	
 	if wall_result:
 		# Hit a wall, add avoidance force
 		var wall_normal = wall_result.normal
 		avoidance_direction += wall_normal * avoidance_force
-		#print("NPC avoiding wall, normal: ", wall_normal)
-	
-	# Check for ledges/drops ahead
-	var ledge_check_start = global_position + desired_direction * ledge_check_distance + Vector3(0, 0.2, 0)
-	var ledge_check_end = ledge_check_start + Vector3(0, -2.0, 0)  # Check 2 units down
-	
-	var ledge_query = PhysicsRayQueryParameters3D.create(ledge_check_start, ledge_check_end)
-	ledge_query.exclude = [self]
-	var ledge_result = space_state.intersect_ray(ledge_query)
-	
-	if not ledge_result:
-		# No ground ahead, avoid this direction
-		var perpendicular = Vector3(-desired_direction.z, 0, desired_direction.x)
-		avoidance_direction += perpendicular * avoidance_force
-		#print("NPC avoiding ledge")
-	
-	# Also check left and right for additional wall avoidance
-	var left_direction = desired_direction.rotated(Vector3.UP, PI/4)  # 45 degrees left
-	var right_direction = desired_direction.rotated(Vector3.UP, -PI/4)  # 45 degrees right
-	
-	for check_dir in [left_direction, right_direction]:
-		var side_check_end = wall_check_start + check_dir * (wall_check_distance * 0.7)
-		var side_query = PhysicsRayQueryParameters3D.create(wall_check_start, side_check_end)
-		side_query.exclude = [self]
-		var side_result = space_state.intersect_ray(side_query)
-		
-		if side_result:
-			avoidance_direction += side_result.normal * (avoidance_force * 0.5)
 	
 	# Combine desired direction with avoidance
 	var final_direction = desired_direction + avoidance_direction
-	
-	# If we're being pushed in the opposite direction, pick a new target
-	if final_direction.dot(desired_direction) < 0.3:
-		_pick_new_target()
-		return Vector3.ZERO  # Stop moving this frame
-	
 	return final_direction.normalized()
 
 func _add_human_like_imprecision(direction: Vector3) -> Vector3:
@@ -230,7 +220,6 @@ func _add_movement_variation() -> void:
 func _start_pause() -> void:
 	is_paused = true
 	pause_timer = randf_range(pause_duration_range.x, pause_duration_range.y)
-	#print("NPC pausing for ", pause_timer, " seconds")
 
 func _apply_deceleration(delta: float) -> void:
 	current_velocity = current_velocity.move_toward(Vector3.ZERO, deceleration * delta)
@@ -238,8 +227,11 @@ func _apply_deceleration(delta: float) -> void:
 	velocity.z = current_velocity.z
 
 func _pick_new_target() -> void:
+	if not navigation_agent:
+		return
+		
 	var attempts = 0
-	var max_attempts = 10
+	var max_attempts = 20
 	
 	while attempts < max_attempts:
 		# Pick a random target within max_distance
@@ -250,36 +242,38 @@ func _pick_new_target() -> void:
 		)
 		var potential_target = global_position + random_offset
 		
-		# Check if the target is reachable (has ground beneath it)
-		if _is_target_safe(potential_target):
-			current_target = potential_target
-			_randomize_movement_parameters()
-			#print("NPC new target: ", current_target, " | Speed multiplier: ", current_speed_multiplier)
+		# Use NavigationServer3D to check if the target is on the NavMesh
+		var nav_map = navigation_agent.get_navigation_map()
+		var closest_point = NavigationServer3D.map_get_closest_point(nav_map, potential_target)
+		
+		# Check if the closest point on navmesh is reasonably close to our desired target
+		var distance_to_navmesh = potential_target.distance_to(closest_point)
+		
+		if distance_to_navmesh < navmesh_sample_distance:
+			# Target is close enough to NavMesh, use the closest point on NavMesh
+			final_target = closest_point
+			navigation_agent.target_position = final_target
 			return
 		
 		attempts += 1
 	
-	# If no safe target found, just pick a closer one
-	var safe_offset = Vector3(
-		randf_range(-max_distance * 0.3, max_distance * 0.3),
-		0,
-		randf_range(-max_distance * 0.3, max_distance * 0.3)
-	)
-	current_target = global_position + safe_offset
-	_randomize_movement_parameters()
-	#print("NPC fallback target: ", current_target)
+	# If no good target found, pick a nearby spawn position
+	if spawn_positions.size() > 0:
+		final_target = spawn_positions[randi() % spawn_positions.size()]
+		navigation_agent.target_position = final_target
+	else:
+		# Last resort: stay near current position
+		var nav_map = navigation_agent.get_navigation_map()
+		final_target = NavigationServer3D.map_get_closest_point(nav_map, global_position)
+		navigation_agent.target_position = final_target
 
-func _is_target_safe(target_pos: Vector3) -> bool:
-	var space_state = get_world_3d().direct_space_state
-	
-	# Check if there's ground at the target position
-	var ground_check_start = target_pos + Vector3(0, 1.0, 0)
-	var ground_check_end = target_pos + Vector3(0, -2.0, 0)
-	
-	var ground_query = PhysicsRayQueryParameters3D.create(ground_check_start, ground_check_end)
-	var ground_result = space_state.intersect_ray(ground_query)
-	
-	return ground_result != null  # True if there's ground
+func _on_target_reached() -> void:
+	# Called when the navigation agent reaches its target
+	_pick_new_target()
+
+func _on_navigation_finished() -> void:
+	# Called when navigation is complete
+	_pick_new_target()
 
 func get_random_spawn_position() -> Vector3:
 	if spawn_positions.size() == 0:
@@ -300,10 +294,8 @@ func recieve_damage(damage: int = 1) -> void:
 	if not multiplayer.is_server():
 		return
 	health -= damage
-	#print("NPC hit! Health: ", health, " | Peer: ", multiplayer.get_remote_sender_id())
 	if health <= 0:
 		health = 2
-		#print("NPC health <= 0, removing NPC at position: ", global_position)
 		destroy_npc.rpc()
 		destroy_npc()
 

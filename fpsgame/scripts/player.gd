@@ -38,8 +38,6 @@ var has_gun_visible: bool = true
 
 # Movement state variables to match NPC behavior
 var current_velocity: Vector3 = Vector3.ZERO
-var speed_multiplier: float = 1.0
-var speed_variation: float = 0.4  # Same as NPC speed variation
 
 var sensitivity: float = 0.005
 var controller_sensitivity: float = 0.010
@@ -72,17 +70,9 @@ func _ready() -> void:
 		print("ERROR: MultiplayerSynchronizer not found! Check node setup for peer: ", multiplayer.get_unique_id())
 		return
 	
-	# Set random speed multiplier to match NPC variation
-	_randomize_movement_parameters()
-	
 	# Delay the setup to ensure everything is properly initialized
 	await get_tree().process_frame
 	setup_player_role()
-
-func _randomize_movement_parameters() -> void:
-	# Randomize speed to match NPC behavior exactly
-	speed_multiplier = randf_range(1.0 - speed_variation, 1.0 + speed_variation)
-	print("Player speed multiplier: ", speed_multiplier, " for peer: ", multiplayer.get_unique_id())
 
 func _collect_spawn_positions() -> void:
 	spawn_positions.clear()
@@ -164,10 +154,10 @@ func _physics_process(delta: float) -> void:
 	var input_dir := Input.get_vector("left", "right", "up", "down")
 	var direction := (transform.basis * Vector3(input_dir.x, 0, input_dir.y)).normalized()
 	
-	# Calculate target velocity with speed variation (same as NPCs)
+	# Calculate target velocity with consistent speed
 	var target_velocity = Vector3.ZERO
 	if direction.length() > 0.1:
-		target_velocity = direction * BASE_SPEED * speed_multiplier
+		target_velocity = direction * BASE_SPEED
 	
 	# Apply acceleration/deceleration (same as NPCs)
 	if target_velocity.length() > 0.1:
@@ -203,8 +193,6 @@ func recieve_damage(damage: int = 1) -> void:
 		health = 1
 		position = get_random_spawn_position()
 		assign_player_color()
-		# Randomize speed again on respawn to keep variation
-		_randomize_movement_parameters()
 
 func setup_player_role() -> void:
 	if not is_multiplayer_authority():
