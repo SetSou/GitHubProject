@@ -21,6 +21,7 @@ extends CharacterBody3D
 # Animation parameters
 @export var idle_animation_name: String = "Idle_A"  # Name of the idle animation
 @export var walk_animation_name: String = "Walk_A"  # Name of the walking animation
+@export var death_animation_name: String = "Death_A"  # Name of the death animation
 @export var animation_transition_speed: float = 0.3  # How fast to blend between animations
 
 # NavMesh parameters
@@ -59,6 +60,7 @@ var movement_timer: float = 0.0
 # Animation state
 var current_animation: String = ""
 var is_moving: bool = false
+var is_dead: bool = false
 
 # Mesh selection
 var available_meshes: Array[Node] = []
@@ -79,10 +81,15 @@ var target_reached_threshold: float = 2.0
 # Synced property for selected mesh
 @export var synced_mesh_index: int = -1 : set = _set_synced_mesh_index
 
+# Synced property for death state
+@export var synced_is_dead: bool = false : set = _set_synced_death_state
+
 func _ready() -> void:
 	_collect_spawn_positions()
 	
 	# Setup random mesh selection
+	# Wait a frame to ensure multiplayer is properly set up
+	await get_tree().process_frame
 	_setup_random_mesh()
 	
 	# Setup NavigationAgent3D
@@ -113,9 +120,47 @@ func _ready() -> void:
 	# Set random color on server
 	npc_color = possible_colors[randi() % possible_colors.size()]
 	
-	# Sync the selected mesh to all clients
-	if selected_mesh_index >= 0:
-		synced_mesh_index = selected_mesh_index
+	# Sync the selected mesh to all clients (removed - now done in _setup_random_mesh)
+	# if selected_mesh_index >= 0:
+	#	sync_mesh_selection.rpc(selected_mesh_index)
+
+@rpc("call_local")
+func sync_mesh_selection(mesh_index: int) -> void:
+	selected_mesh_index = mesh_index
+	
+	# Apply the mesh selection on all clients
+	if available_meshes.size() == 0:
+		_setup_random_mesh()  # Initialize meshes if not done yet
+		return  # _setup_random_mesh will handle the sync, avoid infinite loop
+	
+	# Hide all meshes
+	for mesh in available_meshes:
+		if is_instance_valid(mesh):
+			mesh.visible = false
+	
+	# Show the selected mesh
+	if selected_mesh_index >= 0 and selected_mesh_index < available_meshes.size():
+		if is_instance_valid(available_meshes[selected_mesh_index]):
+			available_meshes[selected_mesh_index].visible = true
+			print("Showing mesh index: ", selected_mesh_index, " on peer: ", multiplayer.get_unique_id())
+
+@rpc("call_local")
+func sync_death_state() -> void:
+	if is_dead:
+		return  # Already applied
+		
+	# Apply death state on all clients
+	is_dead = true
+	
+	# Stop navigation
+	if navigation_agent:
+		navigation_agent.target_position = global_position
+	
+	# Disable collision layer so things can pass through
+	collision_layer = 0
+	
+	# Play death animation
+	_play_animation(death_animation_name)
 
 func _setup_navigation() -> void:
 	if navigation_agent:
@@ -167,10 +212,18 @@ func _setup_random_mesh() -> void:
 	for mesh in available_meshes:
 		mesh.visible = false
 	
-	# Randomly select and show one mesh
+	# Only server selects the mesh, then syncs to all clients
 	if multiplayer.is_server():
 		selected_mesh_index = randi() % available_meshes.size()
+		print("Server selected mesh index: ", selected_mesh_index)
 		_show_selected_mesh()
+		# Use call_deferred to ensure the RPC happens after the scene is fully ready
+		call_deferred("_sync_mesh_to_clients", selected_mesh_index)
+	else:
+		print("Client waiting for mesh selection from server...")
+
+func _sync_mesh_to_clients(mesh_index: int) -> void:
+	sync_mesh_selection.rpc(mesh_index)
 	
 func _show_selected_mesh() -> void:
 	if selected_mesh_index >= 0 and selected_mesh_index < available_meshes.size():
@@ -179,6 +232,11 @@ func _show_selected_mesh() -> void:
 
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
+		return
+	
+	# Handle death state
+	if is_dead:
+		_handle_death_state(delta)
 		return
 	
 	# Apply gravity
@@ -249,6 +307,10 @@ func _navigate_to_target(delta: float) -> void:
 	velocity.z = current_velocity.z
 
 func _update_animation_and_rotation(delta: float) -> void:
+	# Don't update animation/rotation if dead
+	if is_dead:
+		return
+	
 	# Calculate horizontal movement speed
 	var horizontal_velocity = Vector3(velocity.x, 0, velocity.z)
 	var movement_speed = horizontal_velocity.length()
@@ -340,7 +402,7 @@ func _apply_deceleration(delta: float) -> void:
 	velocity.z = current_velocity.z
 
 func _pick_new_target() -> void:
-	if not navigation_agent:
+	if not navigation_agent or is_dead:
 		return
 		
 	var attempts = 0
@@ -420,16 +482,80 @@ func _set_synced_mesh_index(new_index: int) -> void:
 		if is_instance_valid(available_meshes[selected_mesh_index]):
 			available_meshes[selected_mesh_index].visible = true
 
+func _handle_death_state(delta: float) -> void:
+	# Stop all movement
+	current_velocity = Vector3.ZERO
+	velocity.x = 0.0
+	velocity.z = 0.0
+	
+	# Apply gravity so the NPC falls to ground if needed
+	if not is_on_floor():
+		velocity.y -= gravity * delta
+	else:
+		velocity.y = 0.0
+	
+	# Keep the NPC on the last frame of the death animation
+	move_and_slide()
+
+func _start_death_sequence() -> void:
+	if is_dead:
+		return  # Already dead
+	
+	is_dead = true
+	
+	# Stop navigation
+	if navigation_agent:
+		navigation_agent.target_position = global_position
+	
+	# Disable collision layer so other things can pass through the dead NPC
+	# but keep collision mask so the NPC still detects the floor
+	collision_layer = 0
+	# collision_mask stays the same so NPC can still detect ground
+	
+	# Play death animation (will stay on last frame when finished)
+	_play_animation(death_animation_name)
+	
+	# Sync death state to all clients via RPC
+	sync_death_state.rpc()
+
+func _set_synced_death_state(new_death_state: bool) -> void:
+	synced_is_dead = new_death_state
+	
+	if new_death_state and not is_dead:
+		# Apply death state on client
+		is_dead = true
+		
+		# Stop navigation on client
+		if navigation_agent:
+			navigation_agent.target_position = global_position
+		
+		# Disable collision layer on client so things can pass through
+		# but keep collision mask so NPC still detects ground
+		collision_layer = 0
+		# collision_mask stays the same so NPC can still detect ground
+		
+		# Play death animation on client
+		_play_animation(death_animation_name)
+
 @rpc("any_peer", "call_local")
 func recieve_damage(damage: int = 1) -> void:
 	if not multiplayer.is_server():
 		return
+	
+	if is_dead:
+		return  # Already dead, ignore damage
+	
 	health -= damage
 	if health <= 0:
-		health = 2
-		destroy_npc.rpc()
-		destroy_npc()
+		# Start death sequence instead of immediately destroying
+		_start_death_sequence()
 
 @rpc("call_local")
 func destroy_npc() -> void:
 	super.queue_free()
+
+# Debug function - call this manually if needed
+func force_sync_mesh() -> void:
+	if multiplayer.is_server() and selected_mesh_index >= 0:
+		print("Force syncing mesh index: ", selected_mesh_index)
+		sync_mesh_selection.rpc(selected_mesh_index)
