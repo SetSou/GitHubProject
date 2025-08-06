@@ -14,6 +14,15 @@ extends CharacterBody3D
 @export var pause_duration_range: Vector2 = Vector2(0.5, 3.0)  # Random pause duration
 @export var movement_variation: float = 0.3  # How much to vary movement direction
 
+# Rotation parameters
+@export var rotation_speed: float = 8.0  # How fast the NPC rotates to face movement direction
+@export var min_movement_threshold: float = 0.1  # Minimum movement speed to trigger rotation
+
+# Animation parameters
+@export var idle_animation_name: String = "Idle_A"  # Name of the idle animation
+@export var walk_animation_name: String = "Walk_A"  # Name of the walking animation
+@export var animation_transition_speed: float = 0.3  # How fast to blend between animations
+
 # NavMesh parameters
 @export var path_update_distance: float = 2.0  # How close to get before updating path
 @export var navmesh_sample_distance: float = 5.0  # How far to search for valid NavMesh points
@@ -37,6 +46,8 @@ extends CharacterBody3D
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var synchronizer: MultiplayerSynchronizer = $MultiplayerSynchronizer
 @onready var navigation_agent: NavigationAgent3D = $NavigationAgent3D
+@onready var animation_player: AnimationPlayer = $AnimationPlayer
+@onready var skeleton: Skeleton3D = $Character_1_2_22/CharacterArmature1/Skeleton3D
 
 # Movement state
 var target_direction: Vector3 = Vector3.ZERO
@@ -44,6 +55,14 @@ var current_velocity: Vector3 = Vector3.ZERO
 var is_paused: bool = false
 var pause_timer: float = 0.0
 var movement_timer: float = 0.0
+
+# Animation state
+var current_animation: String = ""
+var is_moving: bool = false
+
+# Mesh selection
+var available_meshes: Array[Node] = []
+var selected_mesh_index: int = -1
 
 # Navigation state
 var current_path: PackedVector3Array = PackedVector3Array()
@@ -57,13 +76,23 @@ var target_reached_threshold: float = 2.0
 # Synced property for NPC color
 @export var npc_color: Color = Color.WHITE : set = _set_npc_color
 
+# Synced property for selected mesh
+@export var synced_mesh_index: int = -1 : set = _set_synced_mesh_index
+
 func _ready() -> void:
 	_collect_spawn_positions()
+	
+	# Setup random mesh selection
+	_setup_random_mesh()
 	
 	# Setup NavigationAgent3D
 	if navigation_agent:
 		# Wait for navigation map to be ready
 		call_deferred("_setup_navigation")
+	
+	# Initialize animation
+	if animation_player:
+		_play_animation(idle_animation_name)
 	
 	if not multiplayer.is_server():
 		return
@@ -83,6 +112,10 @@ func _ready() -> void:
 	
 	# Set random color on server
 	npc_color = possible_colors[randi() % possible_colors.size()]
+	
+	# Sync the selected mesh to all clients
+	if selected_mesh_index >= 0:
+		synced_mesh_index = selected_mesh_index
 
 func _setup_navigation() -> void:
 	if navigation_agent:
@@ -113,6 +146,37 @@ func _collect_spawn_positions() -> void:
 		if node is Node3D:
 			spawn_positions.append(node.global_position)
 
+func _setup_random_mesh() -> void:
+	if not skeleton:
+		print("WARNING: Skeleton3D node not found at path: Character_1_2_22/CharacterArmature1/Skeleton3D")
+		return
+	
+	# Collect all mesh children under the skeleton
+	available_meshes.clear()
+	for child in skeleton.get_children():
+		if child is MeshInstance3D:
+			available_meshes.append(child)
+	
+	if available_meshes.size() == 0:
+		print("WARNING: No MeshInstance3D nodes found under Skeleton3D")
+		return
+	
+	print("Found ", available_meshes.size(), " meshes under Skeleton3D")
+	
+	# Hide all meshes first
+	for mesh in available_meshes:
+		mesh.visible = false
+	
+	# Randomly select and show one mesh
+	if multiplayer.is_server():
+		selected_mesh_index = randi() % available_meshes.size()
+		_show_selected_mesh()
+	
+func _show_selected_mesh() -> void:
+	if selected_mesh_index >= 0 and selected_mesh_index < available_meshes.size():
+		available_meshes[selected_mesh_index].visible = true
+		print("Selected mesh index: ", selected_mesh_index)
+
 func _physics_process(delta: float) -> void:
 	if not multiplayer.is_server():
 		return
@@ -130,6 +194,7 @@ func _physics_process(delta: float) -> void:
 			is_paused = false
 			_pick_new_target()  # Pick new target after pause
 		_apply_deceleration(delta)
+		_update_animation_and_rotation(delta)
 		move_and_slide()
 		return
 	
@@ -144,6 +209,9 @@ func _physics_process(delta: float) -> void:
 	else:
 		# Pick a new target if we've finished navigation
 		_pick_new_target()
+	
+	# Update animation and rotation based on movement
+	_update_animation_and_rotation(delta)
 	
 	move_and_slide()
 
@@ -179,6 +247,51 @@ func _navigate_to_target(delta: float) -> void:
 	# Apply velocity
 	velocity.x = current_velocity.x
 	velocity.z = current_velocity.z
+
+func _update_animation_and_rotation(delta: float) -> void:
+	# Calculate horizontal movement speed
+	var horizontal_velocity = Vector3(velocity.x, 0, velocity.z)
+	var movement_speed = horizontal_velocity.length()
+	
+	# Determine if the NPC is moving
+	var was_moving = is_moving
+	is_moving = movement_speed > min_movement_threshold
+	
+	# Update animation based on movement
+	var desired_animation = walk_animation_name if is_moving else idle_animation_name
+	if desired_animation != current_animation:
+		_play_animation(desired_animation)
+	
+	# Rotate to face movement direction
+	if is_moving and horizontal_velocity.length() > min_movement_threshold:
+		var target_look_direction = horizontal_velocity.normalized()
+		var target_transform = transform.looking_at(global_position + target_look_direction, Vector3.UP)
+		
+		# Smoothly rotate towards the target direction
+		transform = transform.interpolate_with(target_transform, rotation_speed * delta)
+
+func _play_animation(animation_name: String) -> void:
+	if not animation_player:
+		return
+		
+	# Check if the animation exists
+	if not animation_player.has_animation(animation_name):
+		print("Warning: Animation '", animation_name, "' not found!")
+		return
+	
+	# Don't restart the same animation
+	if current_animation == animation_name and animation_player.is_playing():
+		return
+	
+	current_animation = animation_name
+	
+	# Play the animation with smooth transition
+	if animation_player.current_animation != "":
+		# Blend from current animation to new one
+		animation_player.play(animation_name, animation_transition_speed)
+	else:
+		# No current animation, just play
+		animation_player.play(animation_name)
 
 func _apply_basic_collision_avoidance(desired_direction: Vector3) -> Vector3:
 	# Simplified collision avoidance as backup to NavMesh
@@ -288,6 +401,24 @@ func _set_npc_color(new_color: Color) -> void:
 			material = StandardMaterial3D.new()
 			mesh_instance.set_surface_override_material(0, material)
 		material.albedo_color = new_color
+
+func _set_synced_mesh_index(new_index: int) -> void:
+	synced_mesh_index = new_index
+	selected_mesh_index = new_index
+	
+	# Apply the mesh selection on all clients
+	if available_meshes.size() == 0:
+		_setup_random_mesh()  # Initialize meshes if not done yet
+	
+	# Hide all meshes
+	for mesh in available_meshes:
+		if is_instance_valid(mesh):
+			mesh.visible = false
+	
+	# Show the selected mesh
+	if selected_mesh_index >= 0 and selected_mesh_index < available_meshes.size():
+		if is_instance_valid(available_meshes[selected_mesh_index]):
+			available_meshes[selected_mesh_index].visible = true
 
 @rpc("any_peer", "call_local")
 func recieve_damage(damage: int = 1) -> void:
