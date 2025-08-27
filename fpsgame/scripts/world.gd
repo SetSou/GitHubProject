@@ -1,5 +1,7 @@
 extends Node
 
+#world script
+
 @onready var main_menu: PanelContainer = $Menu/MainMenu
 @onready var options_menu: PanelContainer = $Menu/Options
 @onready var pause_menu: PanelContainer = $Menu/PauseMenu

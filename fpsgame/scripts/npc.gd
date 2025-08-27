@@ -1,37 +1,37 @@
 extends CharacterBody3D
 
-@export var speed: float = 5.0
+@export var speed: float = 3.0
 @export var max_distance: float = 50.0
 @export var wait_time: float = 2.0
 @export var gravity: float = 9.8
 @export var health: int = 1
 
 # Movement behavior parameters
-@export var acceleration: float = 15.0  # How quickly NPC accelerates
-@export var deceleration: float = 20.0  # How quickly NPC stops
-@export var direction_change_chance: float = 0.02  # Chance per frame to change direction slightly
-@export var stop_chance: float = 0.001  # Chance per frame to stop and look around
-@export var pause_duration_range: Vector2 = Vector2(0.5, 3.0)  # Random pause duration
-@export var movement_variation: float = 0.3  # How much to vary movement direction
+@export var acceleration: float = 15.0
+@export var deceleration: float = 20.0
+@export var direction_change_chance: float = 0.02
+@export var stop_chance: float = 0.001
+@export var pause_duration_range: Vector2 = Vector2(0.5, 3.0)
+@export var movement_variation: float = 0.3
 
 # Rotation parameters
-@export var rotation_speed: float = 8.0  # How fast the NPC rotates to face movement direction
-@export var min_movement_threshold: float = 0.1  # Minimum movement speed to trigger rotation
+@export var rotation_speed: float = 8.0
+@export var min_movement_threshold: float = 0.1
 
 # Animation parameters
-@export var idle_animation_name: String = "Idle_A"  # Name of the idle animation
-@export var walk_animation_name: String = "Walk_A"  # Name of the walking animation
-@export var death_animation_name: String = "Death_A"  # Name of the death animation
-@export var animation_transition_speed: float = 0.3  # How fast to blend between animations
+@export var idle_animation_name: String = "Idle_A"
+@export var walk_animation_name: String = "Walk_A"
+@export var death_animation_name: String = "Death_A"
+@export var animation_transition_speed: float = 0.3
 
 # NavMesh parameters
-@export var path_update_distance: float = 2.0  # How close to get before updating path
-@export var navmesh_sample_distance: float = 5.0  # How far to search for valid NavMesh points
+@export var path_update_distance: float = 2.0
+@export var navmesh_sample_distance: float = 5.0
 
 # Collision avoidance parameters
-@export var wall_check_distance: float = 2.0  # How far ahead to check for walls
-@export var ledge_check_distance: float = 1.5  # How far ahead to check for ledges
-@export var avoidance_force: float = 3.0  # How strong the avoidance force is
+@export var wall_check_distance: float = 2.0
+@export var ledge_check_distance: float = 1.5
+@export var avoidance_force: float = 3.0
 
 # Predefined set of colors for the NPC
 @export var possible_colors: Array[Color] = [
@@ -65,6 +65,7 @@ var is_dead: bool = false
 # Mesh selection
 var available_meshes: Array[Node] = []
 var selected_mesh_index: int = -1
+var mesh_setup_complete: bool = false
 
 # Navigation state
 var current_path: PackedVector3Array = PackedVector3Array()
@@ -75,92 +76,151 @@ var final_target: Vector3
 var spawn_positions: Array[Vector3] = []
 var target_reached_threshold: float = 2.0
 
-# Synced property for NPC color
+# Synced properties
 @export var npc_color: Color = Color.WHITE : set = _set_npc_color
-
-# Synced property for selected mesh
 @export var synced_mesh_index: int = -1 : set = _set_synced_mesh_index
-
-# Synced property for death state
 @export var synced_is_dead: bool = false : set = _set_synced_death_state
+@export var synced_is_moving: bool = false : set = _set_synced_is_moving
+@export var synced_position: Vector3 = Vector3.ZERO : set = _set_synced_position
 
 func _ready() -> void:
 	_collect_spawn_positions()
 	
-	# Setup random mesh selection
-	# Wait a frame to ensure multiplayer is properly set up
-	await get_tree().process_frame
-	_setup_random_mesh()
+	# Initialize position first
+	if multiplayer.is_server():
+		if spawn_positions.size() > 0:
+			position = spawn_positions[randi() % spawn_positions.size()]
+		else:
+			position = Vector3.ZERO
 	
-	# Setup NavigationAgent3D
+	# Set up multiplayer authority
+	if multiplayer.is_server():
+		set_multiplayer_authority(multiplayer.get_unique_id())
+	
+	# Wait for multiplayer to be properly set up
+	await get_tree().process_frame
+	await get_tree().process_frame  # Extra frame for safety
+	
+	# Setup mesh selection with proper timing
+	_setup_mesh_system()
+	
+	# Setup navigation
 	if navigation_agent:
-		# Wait for navigation map to be ready
 		call_deferred("_setup_navigation")
 	
 	# Initialize animation
 	if animation_player:
 		_play_animation(idle_animation_name)
 	
-	if not multiplayer.is_server():
-		return
-		
-	set_multiplayer_authority(multiplayer.get_unique_id())
-	
-	# Use collected spawn positions for initial spawn
-	if spawn_positions.size() > 0:
-		position = spawn_positions[randi() % spawn_positions.size()]
-	else:
-		position = Vector3.ZERO
-	
-	if mesh_instance == null:
-		return
-	if synchronizer == null:
-		return
-	
 	# Set random color on server
-	npc_color = possible_colors[randi() % possible_colors.size()]
-	
-	# Sync the selected mesh to all clients (removed - now done in _setup_random_mesh)
-	# if selected_mesh_index >= 0:
-	#	sync_mesh_selection.rpc(selected_mesh_index)
+	if multiplayer.is_server():
+		npc_color = possible_colors[randi() % possible_colors.size()]
 
-@rpc("call_local")
-func sync_mesh_selection(mesh_index: int) -> void:
-	selected_mesh_index = mesh_index
+func _setup_mesh_system() -> void:
+	# First, collect available meshes
+	_collect_available_meshes()
 	
-	# Apply the mesh selection on all clients
 	if available_meshes.size() == 0:
-		_setup_random_mesh()  # Initialize meshes if not done yet
-		return  # _setup_random_mesh will handle the sync, avoid infinite loop
+		print("ERROR: No meshes found for NPC!")
+		return
+	
+	if multiplayer.is_server():
+		# Server selects and syncs the mesh
+		_server_select_and_sync_mesh()
+	else:
+		# Client waits for server's mesh selection
+		_wait_for_mesh_sync()
+
+func _collect_available_meshes() -> void:
+	available_meshes.clear()
+	
+	if not skeleton:
+		print("WARNING: Skeleton3D node not found")
+		return
+	
+	# Collect all mesh children under the skeleton
+	for child in skeleton.get_children():
+		if child is MeshInstance3D:
+			available_meshes.append(child)
+			child.visible = false  # Hide all meshes initially
+	
+	print("Found ", available_meshes.size(), " meshes under Skeleton3D")
+
+func _server_select_and_sync_mesh() -> void:
+	if available_meshes.size() == 0:
+		return
+	
+	# Select random mesh
+	selected_mesh_index = randi() % available_meshes.size()
+	synced_mesh_index = selected_mesh_index  # Update synced property
+	
+	# Show the selected mesh locally
+	_show_mesh_at_index(selected_mesh_index)
+	
+	# Wait a moment for clients to be ready, then sync
+	await get_tree().create_timer(0.5).timeout
+	_sync_mesh_to_all_clients()
+	
+	mesh_setup_complete = true
+	print("Server: Mesh setup complete for index: ", selected_mesh_index)
+
+func _wait_for_mesh_sync() -> void:
+	# Client waits for server to send mesh selection
+	var timeout = 0.0
+	var max_wait = 10.0  # 10 second timeout
+	
+	while synced_mesh_index == -1 and timeout < max_wait:
+		await get_tree().process_frame
+		timeout += get_process_delta_time()
+	
+	if synced_mesh_index != -1:
+		_show_mesh_at_index(synced_mesh_index)
+		mesh_setup_complete = true
+		print("Client: Received mesh index: ", synced_mesh_index)
+	else:
+		print("Client: Timeout waiting for mesh sync, using fallback")
+		_use_fallback_mesh()
+
+func _use_fallback_mesh() -> void:
+	# Fallback: show first available mesh
+	if available_meshes.size() > 0:
+		_show_mesh_at_index(0)
+		mesh_setup_complete = true
+
+func _show_mesh_at_index(index: int) -> void:
+	if index < 0 or index >= available_meshes.size():
+		return
 	
 	# Hide all meshes
 	for mesh in available_meshes:
 		if is_instance_valid(mesh):
 			mesh.visible = false
 	
-	# Show the selected mesh
-	if selected_mesh_index >= 0 and selected_mesh_index < available_meshes.size():
-		if is_instance_valid(available_meshes[selected_mesh_index]):
-			available_meshes[selected_mesh_index].visible = true
-			print("Showing mesh index: ", selected_mesh_index, " on peer: ", multiplayer.get_unique_id())
+	# Show selected mesh
+	if is_instance_valid(available_meshes[index]):
+		available_meshes[index].visible = true
+		selected_mesh_index = index
 
-@rpc("call_local")
-func sync_death_state() -> void:
-	if is_dead:
-		return  # Already applied
-		
-	# Apply death state on all clients
-	is_dead = true
-	
-	# Stop navigation
-	if navigation_agent:
-		navigation_agent.target_position = global_position
-	
-	# Disable collision layer so things can pass through
-	collision_layer = 0
-	
-	# Play death animation
-	_play_animation(death_animation_name)
+@rpc("call_local", "reliable")
+func _sync_mesh_to_all_clients() -> void:
+	if multiplayer.is_server():
+		_receive_mesh_sync.rpc(selected_mesh_index)
+
+@rpc("call_local", "reliable")
+func _receive_mesh_sync(mesh_index: int) -> void:
+	print("Received mesh sync for index: ", mesh_index)
+	synced_mesh_index = mesh_index
+	_show_mesh_at_index(mesh_index)
+	mesh_setup_complete = true
+
+@rpc("call_local", "reliable")
+func sync_death_animation() -> void:
+	# Force death animation on all clients
+	if not multiplayer.is_server():
+		is_dead = true
+		collision_layer = 0
+		_play_animation(death_animation_name)
+		print("Client: Received death animation sync")
 
 func _setup_navigation() -> void:
 	if navigation_agent:
@@ -177,7 +237,8 @@ func _setup_navigation() -> void:
 		
 		# Start navigation after a short delay to ensure everything is ready
 		await get_tree().process_frame
-		_pick_new_target()
+		if multiplayer.is_server():
+			_pick_new_target()
 
 func _collect_spawn_positions() -> void:
 	spawn_positions.clear()
@@ -191,52 +252,22 @@ func _collect_spawn_positions() -> void:
 		if node is Node3D:
 			spawn_positions.append(node.global_position)
 
-func _setup_random_mesh() -> void:
-	if not skeleton:
-		print("WARNING: Skeleton3D node not found at path: Character_1_2_22/CharacterArmature1/Skeleton3D")
-		return
-	
-	# Collect all mesh children under the skeleton
-	available_meshes.clear()
-	for child in skeleton.get_children():
-		if child is MeshInstance3D:
-			available_meshes.append(child)
-	
-	if available_meshes.size() == 0:
-		print("WARNING: No MeshInstance3D nodes found under Skeleton3D")
-		return
-	
-	print("Found ", available_meshes.size(), " meshes under Skeleton3D")
-	
-	# Hide all meshes first
-	for mesh in available_meshes:
-		mesh.visible = false
-	
-	# Only server selects the mesh, then syncs to all clients
-	if multiplayer.is_server():
-		selected_mesh_index = randi() % available_meshes.size()
-		print("Server selected mesh index: ", selected_mesh_index)
-		_show_selected_mesh()
-		# Use call_deferred to ensure the RPC happens after the scene is fully ready
-		call_deferred("_sync_mesh_to_clients", selected_mesh_index)
-	else:
-		print("Client waiting for mesh selection from server...")
-
-func _sync_mesh_to_clients(mesh_index: int) -> void:
-	sync_mesh_selection.rpc(mesh_index)
-	
-func _show_selected_mesh() -> void:
-	if selected_mesh_index >= 0 and selected_mesh_index < available_meshes.size():
-		available_meshes[selected_mesh_index].visible = true
-		print("Selected mesh index: ", selected_mesh_index)
-
 func _physics_process(delta: float) -> void:
-	if not multiplayer.is_server():
+	# Don't process if mesh setup isn't complete
+	if not mesh_setup_complete:
 		return
 	
+	if multiplayer.is_server():
+		_server_physics_process(delta)
+	else:
+		_client_physics_process(delta)
+
+func _server_physics_process(delta: float) -> void:
 	# Handle death state
 	if is_dead:
 		_handle_death_state(delta)
+		synced_is_moving = false
+		synced_position = global_position
 		return
 	
 	# Apply gravity
@@ -250,13 +281,15 @@ func _physics_process(delta: float) -> void:
 		pause_timer -= delta
 		if pause_timer <= 0.0:
 			is_paused = false
-			_pick_new_target()  # Pick new target after pause
+			_pick_new_target()
 		_apply_deceleration(delta)
 		_update_animation_and_rotation(delta)
+		synced_is_moving = false
 		move_and_slide()
+		synced_position = global_position
 		return
 	
-	# Random chance to pause (simulate player stopping to look around)
+	# Random chance to pause
 	if randf() < stop_chance:
 		_start_pause()
 		return
@@ -265,13 +298,31 @@ func _physics_process(delta: float) -> void:
 	if navigation_agent and not navigation_agent.is_navigation_finished():
 		_navigate_to_target(delta)
 	else:
-		# Pick a new target if we've finished navigation
 		_pick_new_target()
 	
 	# Update animation and rotation based on movement
 	_update_animation_and_rotation(delta)
 	
+	# Sync movement state to clients
+	var horizontal_velocity = Vector3(velocity.x, 0, velocity.z)
+	synced_is_moving = horizontal_velocity.length() > min_movement_threshold
+	
 	move_and_slide()
+	synced_position = global_position
+
+func _client_physics_process(delta: float) -> void:
+	# Clients only handle animations and position interpolation
+	if is_dead:
+		# Make sure death animation stays playing
+		if current_animation != death_animation_name:
+			_play_animation(death_animation_name)
+		return
+	
+	# Interpolate position smoothly
+	global_position = global_position.lerp(synced_position, 10.0 * delta)
+	
+	# Update animations based on synced movement state
+	_update_client_animation()
 
 func _navigate_to_target(delta: float) -> void:
 	# Get the next position from the navigation agent
@@ -286,8 +337,6 @@ func _navigate_to_target(delta: float) -> void:
 		_add_movement_variation()
 	
 	desired_direction = _add_human_like_imprecision(desired_direction)
-	
-	# Apply some collision avoidance as backup (though NavMesh should handle most of this)
 	desired_direction = _apply_basic_collision_avoidance(desired_direction)
 	
 	# Update target direction with smoothing
@@ -307,7 +356,6 @@ func _navigate_to_target(delta: float) -> void:
 	velocity.z = current_velocity.z
 
 func _update_animation_and_rotation(delta: float) -> void:
-	# Don't update animation/rotation if dead
 	if is_dead:
 		return
 	
@@ -328,8 +376,6 @@ func _update_animation_and_rotation(delta: float) -> void:
 	if is_moving and horizontal_velocity.length() > min_movement_threshold:
 		var target_look_direction = horizontal_velocity.normalized()
 		var target_transform = transform.looking_at(global_position + target_look_direction, Vector3.UP)
-		
-		# Smoothly rotate towards the target direction
 		transform = transform.interpolate_with(target_transform, rotation_speed * delta)
 
 func _play_animation(animation_name: String) -> void:
@@ -349,18 +395,14 @@ func _play_animation(animation_name: String) -> void:
 	
 	# Play the animation with smooth transition
 	if animation_player.current_animation != "":
-		# Blend from current animation to new one
 		animation_player.play(animation_name, animation_transition_speed)
 	else:
-		# No current animation, just play
 		animation_player.play(animation_name)
 
 func _apply_basic_collision_avoidance(desired_direction: Vector3) -> Vector3:
-	# Simplified collision avoidance as backup to NavMesh
 	var space_state = get_world_3d().direct_space_state
 	var avoidance_direction = Vector3.ZERO
 	
-	# Check for walls/obstacles ahead
 	var wall_check_start = global_position + Vector3(0, 0.5, 0)
 	var wall_check_end = wall_check_start + desired_direction * wall_check_distance
 	
@@ -369,16 +411,13 @@ func _apply_basic_collision_avoidance(desired_direction: Vector3) -> Vector3:
 	var wall_result = space_state.intersect_ray(wall_query)
 	
 	if wall_result:
-		# Hit a wall, add avoidance force
 		var wall_normal = wall_result.normal
 		avoidance_direction += wall_normal * avoidance_force
 	
-	# Combine desired direction with avoidance
 	var final_direction = desired_direction + avoidance_direction
 	return final_direction.normalized()
 
 func _add_human_like_imprecision(direction: Vector3) -> Vector3:
-	# Add slight random variations to simulate human imprecision
 	var noise_x = sin(movement_timer * 2.0 + randf() * 10.0) * 0.1
 	var noise_z = cos(movement_timer * 1.5 + randf() * 10.0) * 0.1
 	
@@ -388,8 +427,7 @@ func _add_human_like_imprecision(direction: Vector3) -> Vector3:
 	return direction.normalized()
 
 func _add_movement_variation() -> void:
-	# Add random variation to current movement direction
-	var random_angle = randf_range(-PI/6, PI/6)  # ±30 degrees
+	var random_angle = randf_range(-PI/6, PI/6)
 	target_direction = target_direction.rotated(Vector3.UP, random_angle)
 
 func _start_pause() -> void:
@@ -409,7 +447,6 @@ func _pick_new_target() -> void:
 	var max_attempts = 20
 	
 	while attempts < max_attempts:
-		# Pick a random target within max_distance
 		var random_offset = Vector3(
 			randf_range(-max_distance, max_distance),
 			0,
@@ -417,37 +454,31 @@ func _pick_new_target() -> void:
 		)
 		var potential_target = global_position + random_offset
 		
-		# Use NavigationServer3D to check if the target is on the NavMesh
 		var nav_map = navigation_agent.get_navigation_map()
 		var closest_point = NavigationServer3D.map_get_closest_point(nav_map, potential_target)
 		
-		# Check if the closest point on navmesh is reasonably close to our desired target
 		var distance_to_navmesh = potential_target.distance_to(closest_point)
 		
 		if distance_to_navmesh < navmesh_sample_distance:
-			# Target is close enough to NavMesh, use the closest point on NavMesh
 			final_target = closest_point
 			navigation_agent.target_position = final_target
 			return
 		
 		attempts += 1
 	
-	# If no good target found, pick a nearby spawn position
+	# Fallback to spawn position
 	if spawn_positions.size() > 0:
 		final_target = spawn_positions[randi() % spawn_positions.size()]
 		navigation_agent.target_position = final_target
 	else:
-		# Last resort: stay near current position
 		var nav_map = navigation_agent.get_navigation_map()
 		final_target = NavigationServer3D.map_get_closest_point(nav_map, global_position)
 		navigation_agent.target_position = final_target
 
 func _on_target_reached() -> void:
-	# Called when the navigation agent reaches its target
 	_pick_new_target()
 
 func _on_navigation_finished() -> void:
-	# Called when navigation is complete
 	_pick_new_target()
 
 func get_random_spawn_position() -> Vector3:
@@ -465,97 +496,82 @@ func _set_npc_color(new_color: Color) -> void:
 		material.albedo_color = new_color
 
 func _set_synced_mesh_index(new_index: int) -> void:
+	var old_index = synced_mesh_index
 	synced_mesh_index = new_index
-	selected_mesh_index = new_index
 	
-	# Apply the mesh selection on all clients
-	if available_meshes.size() == 0:
-		_setup_random_mesh()  # Initialize meshes if not done yet
-	
-	# Hide all meshes
-	for mesh in available_meshes:
-		if is_instance_valid(mesh):
-			mesh.visible = false
-	
-	# Show the selected mesh
-	if selected_mesh_index >= 0 and selected_mesh_index < available_meshes.size():
-		if is_instance_valid(available_meshes[selected_mesh_index]):
-			available_meshes[selected_mesh_index].visible = true
+	# Only apply if this is a new value and we have meshes available
+	if old_index != new_index and available_meshes.size() > 0:
+		_show_mesh_at_index(new_index)
 
 func _handle_death_state(delta: float) -> void:
-	# Stop all movement
 	current_velocity = Vector3.ZERO
 	velocity.x = 0.0
 	velocity.z = 0.0
 	
-	# Apply gravity so the NPC falls to ground if needed
 	if not is_on_floor():
 		velocity.y -= gravity * delta
 	else:
 		velocity.y = 0.0
 	
-	# Keep the NPC on the last frame of the death animation
 	move_and_slide()
 
 func _start_death_sequence() -> void:
 	if is_dead:
-		return  # Already dead
+		return
 	
 	is_dead = true
+	synced_is_dead = true  # Sync to clients
+	synced_is_moving = false  # Stop movement animation
 	
-	# Stop navigation
 	if navigation_agent:
 		navigation_agent.target_position = global_position
 	
-	# Disable collision layer so other things can pass through the dead NPC
-	# but keep collision mask so the NPC still detects the floor
 	collision_layer = 0
-	# collision_mask stays the same so NPC can still detect ground
-	
-	# Play death animation (will stay on last frame when finished)
 	_play_animation(death_animation_name)
 	
-	# Sync death state to all clients via RPC
-	sync_death_state.rpc()
+	# Explicitly sync death animation to all clients
+	sync_death_animation.rpc()
+
+func _update_client_animation() -> void:
+	# Update animation based on synced movement state
+	var desired_animation = walk_animation_name if synced_is_moving else idle_animation_name
+	if desired_animation != current_animation:
+		_play_animation(desired_animation)
+
+func _set_synced_is_moving(new_moving_state: bool) -> void:
+	synced_is_moving = new_moving_state
+	# If this is a client, update animation immediately (but not if dead)
+	if not multiplayer.is_server() and not is_dead:
+		_update_client_animation()
+
+func _set_synced_position(new_position: Vector3) -> void:
+	synced_position = new_position
 
 func _set_synced_death_state(new_death_state: bool) -> void:
+	var old_state = synced_is_dead
 	synced_is_dead = new_death_state
 	
-	if new_death_state and not is_dead:
-		# Apply death state on client
+	if old_state != new_death_state and new_death_state and not is_dead:
 		is_dead = true
 		
-		# Stop navigation on client
 		if navigation_agent:
 			navigation_agent.target_position = global_position
 		
-		# Disable collision layer on client so things can pass through
-		# but keep collision mask so NPC still detects ground
 		collision_layer = 0
-		# collision_mask stays the same so NPC can still detect ground
-		
-		# Play death animation on client
 		_play_animation(death_animation_name)
 
-@rpc("any_peer", "call_local")
+@rpc("any_peer", "call_local", "reliable")
 func recieve_damage(damage: int = 1) -> void:
 	if not multiplayer.is_server():
 		return
 	
 	if is_dead:
-		return  # Already dead, ignore damage
+		return
 	
 	health -= damage
 	if health <= 0:
-		# Start death sequence instead of immediately destroying
 		_start_death_sequence()
 
-@rpc("call_local")
+@rpc("call_local", "reliable")
 func destroy_npc() -> void:
 	super.queue_free()
-
-# Debug function - call this manually if needed
-func force_sync_mesh() -> void:
-	if multiplayer.is_server() and selected_mesh_index >= 0:
-		print("Force syncing mesh index: ", selected_mesh_index)
-		sync_mesh_selection.rpc(selected_mesh_index)

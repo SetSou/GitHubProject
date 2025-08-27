@@ -7,6 +7,7 @@ extends CharacterBody3D
 @onready var gunshot_sound: AudioStreamPlayer3D = %GunshotSound
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
 @onready var synchronizer: MultiplayerSynchronizer = $MultiplayerSynchronizer
+@onready var skeleton: Skeleton3D = $Character_1_2_22/CharacterArmature1/Skeleton3D
 
 ## Number of shots before a player dies
 @export var health: int = 1
@@ -24,7 +25,7 @@ extends CharacterBody3D
 @export var player_color: Color = Color.WHITE : set = _set_player_color
 
 # Movement parameters - MUST match NPC values exactly
-const BASE_SPEED = 5.0  # Same as NPC speed
+const BASE_SPEED = 3.0  # Same as NPC speed
 const ACCELERATION = 15.0  # Same as NPC acceleration
 const DECELERATION = 20.0  # Same as NPC deceleration
 const JUMP_VELOCITY = 4.5
@@ -44,6 +45,14 @@ var controller_sensitivity: float = 0.010
 var axis_vector: Vector2
 var mouse_captured: bool = true
 
+# Skin selection variables
+var available_skins: Array[Node] = []
+var selected_skin_index: int = -1
+var skin_setup_complete: bool = false
+
+# Synced properties for skin system
+@export var synced_skin_index: int = -1 : set = _set_synced_skin_index
+
 func _enter_tree() -> void:
 	set_multiplayer_authority(str(name).to_int())
 
@@ -51,28 +60,134 @@ func _ready() -> void:
 	# Collect spawn positions from SpawnPoint nodes
 	_collect_spawn_positions()
 	
-	if not is_multiplayer_authority():
-		return
-	Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
-	camera.current = true
-	
-	# Use collected spawn positions for initial spawn
-	if spawn_positions.size() > 0:
-		position = spawn_positions[randi() % spawn_positions.size()]
-	else:
-		print("WARNING: No SpawnPoint nodes found in group 'SpawnPoint'. Using default position.")
-		position = Vector3.ZERO
-	
-	if mesh_instance == null:
-		print("ERROR: MeshInstance3D not found! Check node setup for peer: ", multiplayer.get_unique_id())
-		return
-	if synchronizer == null:
-		print("ERROR: MultiplayerSynchronizer not found! Check node setup for peer: ", multiplayer.get_unique_id())
-		return
-	
-	# Delay the setup to ensure everything is properly initialized
+	# Wait for multiplayer to be ready
 	await get_tree().process_frame
-	setup_player_role()
+	await get_tree().process_frame
+	
+	# Setup skin system for all players
+	_setup_skin_system()
+	
+	# Only setup controls and camera for the local player
+	if is_multiplayer_authority():
+		Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
+		camera.current = true
+		
+		# Use collected spawn positions for initial spawn
+		if spawn_positions.size() > 0:
+			position = spawn_positions[randi() % spawn_positions.size()]
+		else:
+			print("WARNING: No SpawnPoint nodes found in group 'SpawnPoint'. Using default position.")
+			position = Vector3.ZERO
+		
+		if mesh_instance == null:
+			print("ERROR: MeshInstance3D not found! Check node setup for peer: ", multiplayer.get_unique_id())
+			return
+		if synchronizer == null:
+			print("ERROR: MultiplayerSynchronizer not found! Check node setup for peer: ", multiplayer.get_unique_id())
+			return
+		
+		# Setup player role after skin system
+		call_deferred("setup_player_role")
+
+func _setup_skin_system() -> void:
+	print("Setting up skin system for player: ", name, " | Authority: ", multiplayer.get_unique_id(), " | Is local: ", is_multiplayer_authority())
+	
+	# First, collect available skins
+	_collect_available_skins()
+	
+	if available_skins.size() == 0:
+		print("ERROR: No skins found for Player!")
+		return
+	
+	# Only the player's owner selects their skin
+	if is_multiplayer_authority():
+		if multiplayer.is_server():
+			# Host gets the police skin (index 0)
+			print("Host selecting police skin (index 0)")
+			_select_and_sync_skin(0)
+		else:
+			# Client gets random skin (excluding police skin)
+			var random_index = randi() % (available_skins.size() - 1) + 1  # Skip index 0 (police)
+			print("Client selecting random skin (index ", random_index, ")")
+			_select_and_sync_skin(random_index)
+	
+	# All instances wait for the skin sync and apply visibility rules
+	_wait_and_apply_skin_visibility()
+
+func _collect_available_skins() -> void:
+	available_skins.clear()
+	
+	if not skeleton:
+		print("WARNING: Skeleton3D node not found for player")
+		return
+	
+	# Collect all mesh children under the skeleton
+	for child in skeleton.get_children():
+		if child is MeshInstance3D:
+			available_skins.append(child)
+			child.visible = false  # Hide all skins initially
+	
+	print("Player found ", available_skins.size(), " skins under Skeleton3D")
+
+func _select_and_sync_skin(skin_index: int) -> void:
+	if available_skins.size() == 0:
+		return
+	
+	# Clamp skin index to valid range
+	skin_index = clamp(skin_index, 0, available_skins.size() - 1)
+	selected_skin_index = skin_index
+	synced_skin_index = skin_index
+	
+	print("Player ", name, " selected skin index: ", skin_index)
+	
+	# Sync to all clients
+	_broadcast_skin_selection.rpc(skin_index)
+
+@rpc("call_local", "reliable")
+func _broadcast_skin_selection(skin_index: int) -> void:
+	print("Received skin broadcast for player ", name, ": index ", skin_index)
+	synced_skin_index = skin_index
+	selected_skin_index = skin_index
+	
+	# Apply visibility immediately
+	_apply_skin_visibility()
+
+func _wait_and_apply_skin_visibility() -> void:
+	# Wait for skin selection
+	var timeout = 0.0
+	var max_wait = 5.0
+	
+	while synced_skin_index == -1 and timeout < max_wait:
+		await get_tree().process_frame
+		timeout += get_process_delta_time()
+	
+	if synced_skin_index != -1:
+		_apply_skin_visibility()
+		skin_setup_complete = true
+		print("Skin setup complete for player ", name)
+	else:
+		print("Timeout waiting for skin sync for player ", name)
+
+func _apply_skin_visibility() -> void:
+	if available_skins.size() == 0 or selected_skin_index == -1:
+		return
+	
+	# Hide all skins first
+	for skin in available_skins:
+		if is_instance_valid(skin):
+			skin.visible = false
+	
+	# Determine if this player should be visible
+	# Hide skin for the local player (first person view), show for others
+	var should_show_skin = not is_multiplayer_authority()
+	
+	print("Player ", name, " skin visibility: ", should_show_skin, " (is_local: ", is_multiplayer_authority(), ")")
+	
+	# Show the selected skin if it should be visible
+	if should_show_skin and selected_skin_index < available_skins.size():
+		if is_instance_valid(available_skins[selected_skin_index]):
+			available_skins[selected_skin_index].visible = true
+			print("Showing skin index ", selected_skin_index, " for player ", name)
 
 func _collect_spawn_positions() -> void:
 	spawn_positions.clear()
@@ -260,3 +375,12 @@ func _set_player_color(new_color: Color) -> void:
 		print("Player color set to: ", new_color, " for peer: ", multiplayer.get_unique_id())
 	else:
 		print("ERROR: MeshInstance3D is null for peer: ", multiplayer.get_unique_id())
+
+func _set_synced_skin_index(new_index: int) -> void:
+	var old_index = synced_skin_index
+	synced_skin_index = new_index
+	selected_skin_index = new_index
+	
+	# Only apply if this is a new value and we have skins available
+	if old_index != new_index and available_skins.size() > 0:
+		_apply_skin_visibility()
