@@ -31,6 +31,14 @@ const DECELERATION = 20.0  # Same as NPC deceleration
 const JUMP_VELOCITY = 4.5
 const GRAVITY = 9.8  # Same as NPC gravity
 
+# Animation parameters - different sets for host vs clients
+const HOST_IDLE_ANIMATION = "Pistol_Idle"
+const HOST_WALK_ANIMATION = "Pistol_Walk" 
+const CLIENT_IDLE_ANIMATION = "Idle_A"
+const CLIENT_WALK_ANIMATION = "Walk_A"
+const SHOOT_ANIMATION = "shoot"
+const ANIMATION_TRANSITION_SPEED = 0.3
+
 # Array to store spawn positions from SpawnPoint nodes
 var spawn_positions: Array[Vector3] = []
 
@@ -49,6 +57,10 @@ var mouse_captured: bool = true
 var available_skins: Array[Node] = []
 var selected_skin_index: int = -1
 var skin_setup_complete: bool = false
+
+# Animation variables
+var current_animation_name: String = ""
+var is_moving_for_animation: bool = false
 
 # FIXED: Added the missing synced properties that the MultiplayerSynchronizer expects
 @export var synced_skin_index: int = -1 : set = _set_synced_skin_index
@@ -232,7 +244,7 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.rotate_x(-event.relative.y * sensitivity)
 		camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
 
-	if Input.is_action_just_pressed("shoot") and anim_player.current_animation != "shoot" and has_gun():
+	if Input.is_action_just_pressed("shoot") and anim_player.current_animation != SHOOT_ANIMATION and has_gun():
 		play_shoot_effects.rpc()
 		gunshot_sound.play()
 		if raycast.is_colliding():
@@ -292,20 +304,89 @@ func _physics_process(delta: float) -> void:
 	velocity.x = current_velocity.x
 	velocity.z = current_velocity.z
 	
-	# Handle animations
-	if anim_player.current_animation == "shoot":
-		pass
-	elif input_dir != Vector2.ZERO and is_on_floor():
-		anim_player.play("move")
-	else:
-		anim_player.play("idle")
+	# Update movement state for animation
+	is_moving_for_animation = input_dir != Vector2.ZERO and is_on_floor()
+	
+	# Handle animations - NEW ANIMATION SYSTEM
+	_update_player_animations()
 	
 	move_and_slide()
+
+func _update_player_animations() -> void:
+	# Debug: Check if animation player exists
+	if not anim_player:
+		print("ERROR: AnimationPlayer is null!")
+		return
+	
+	# Don't interrupt shoot animation
+	if anim_player.current_animation == SHOOT_ANIMATION:
+		return
+	
+	var desired_animation: String
+	
+	# Determine which animation set to use based on player role
+	if has_gun():
+		# Host uses pistol animations
+		desired_animation = HOST_WALK_ANIMATION if is_moving_for_animation else HOST_IDLE_ANIMATION
+		print("DEBUG: Host player - desired animation: ", desired_animation, " | moving: ", is_moving_for_animation)
+	else:
+		# Client uses regular animations
+		desired_animation = CLIENT_WALK_ANIMATION if is_moving_for_animation else CLIENT_IDLE_ANIMATION
+		print("DEBUG: Client player - desired animation: ", desired_animation, " | moving: ", is_moving_for_animation)
+	
+	# Only change animation if it's different from current
+	if desired_animation != current_animation_name:
+		print("DEBUG: Changing animation from '", current_animation_name, "' to '", desired_animation, "'")
+		_play_player_animation(desired_animation)
+	else:
+		# Debug: Show current state even when not changing
+		print("DEBUG: Keeping current animation: ", current_animation_name)
+
+func _play_player_animation(animation_name: String) -> void:
+	if not anim_player:
+		print("ERROR: AnimationPlayer is null!")
+		return
+	
+	# Debug: List all available animations
+	print("DEBUG: Available animations in AnimationPlayer:")
+	var animation_list = anim_player.get_animation_list()
+	for anim_name in animation_list:
+		print("  - ", anim_name)
+	
+	# Check if the animation exists
+	if not anim_player.has_animation(animation_name):
+		print("ERROR: Animation '", animation_name, "' not found for player!")
+		print("DEBUG: Trying fallback animations...")
+		
+		# Try common fallback names
+		var fallbacks = ["idle", "walk", "Idle", "Walk", "default"]
+		for fallback in fallbacks:
+			if anim_player.has_animation(fallback):
+				print("DEBUG: Using fallback animation: ", fallback)
+				animation_name = fallback
+				break
+		
+		if not anim_player.has_animation(animation_name):
+			print("ERROR: No suitable animation found!")
+			return
+	
+	current_animation_name = animation_name
+	
+	# Play the animation with smooth transition
+	if anim_player.current_animation != "":
+		print("DEBUG: Playing animation with transition: ", animation_name)
+		anim_player.play(animation_name, ANIMATION_TRANSITION_SPEED)
+	else:
+		print("DEBUG: Playing animation: ", animation_name)
+		anim_player.play(animation_name)
+	
+	print("SUCCESS: Playing animation: ", animation_name, " for player (has_gun: ", has_gun(), ")")
 
 @rpc("call_local")
 func play_shoot_effects() -> void:
 	anim_player.stop()
-	anim_player.play("shoot")
+	anim_player.play(SHOOT_ANIMATION)
+	current_animation_name = SHOOT_ANIMATION  # Track the current animation
 	muzzle_flash.restart()
 	muzzle_flash.emitting = true
 
@@ -316,6 +397,14 @@ func recieve_damage(damage: int = 1) -> void:
 		health = 1
 		position = get_random_spawn_position()
 		assign_player_color()
+		
+		# Add random skin selection on respawn for clients (non-host players)
+		if is_multiplayer_authority() and not multiplayer.is_server():
+			# Client gets random skin (excluding police skin at index 0)
+			if available_skins.size() > 1:
+				var random_index = randi_range(1, available_skins.size() - 1)
+				print("Client respawning with new random skin (index ", random_index, ")")
+				_select_and_sync_skin(random_index)
 
 func setup_player_role() -> void:
 	if not is_multiplayer_authority():
