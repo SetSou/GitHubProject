@@ -50,8 +50,9 @@ var available_skins: Array[Node] = []
 var selected_skin_index: int = -1
 var skin_setup_complete: bool = false
 
-# Synced properties for skin system
+# FIXED: Added the missing synced properties that the MultiplayerSynchronizer expects
 @export var synced_skin_index: int = -1 : set = _set_synced_skin_index
+@export var synced_mesh_index: int = -1 : set = _set_synced_mesh_index
 
 func _enter_tree() -> void:
 	set_multiplayer_authority(str(name).to_int())
@@ -64,7 +65,7 @@ func _ready() -> void:
 	await get_tree().process_frame
 	await get_tree().process_frame
 	
-	# Setup skin system for all players
+	# Setup skin system - this needs to happen for ALL player instances
 	_setup_skin_system()
 	
 	# Only setup controls and camera for the local player
@@ -99,20 +100,23 @@ func _setup_skin_system() -> void:
 		print("ERROR: No skins found for Player!")
 		return
 	
-	# Only the player's owner selects their skin
+	# Only the player's owner selects and broadcasts their skin
 	if is_multiplayer_authority():
+		# Wait a bit longer for all players to be ready
+		await get_tree().create_timer(0.5).timeout
+		
 		if multiplayer.is_server():
 			# Host gets the police skin (index 0)
 			print("Host selecting police skin (index 0)")
 			_select_and_sync_skin(0)
 		else:
-			# Client gets random skin (excluding police skin)
-			var random_index = randi() % (available_skins.size() - 1) + 1  # Skip index 0 (police)
+			# Client gets random skin (excluding police skin)  
+			var random_index = randi_range(1, available_skins.size() - 1)  # Skip index 0 (police)
 			print("Client selecting random skin (index ", random_index, ")")
 			_select_and_sync_skin(random_index)
-	
-	# All instances wait for the skin sync and apply visibility rules
-	_wait_and_apply_skin_visibility()
+	else:
+		# Non-authority players wait for skin broadcast
+		print("Non-authority player waiting for skin broadcast for: ", name)
 
 func _collect_available_skins() -> void:
 	available_skins.clear()
@@ -136,58 +140,57 @@ func _select_and_sync_skin(skin_index: int) -> void:
 	# Clamp skin index to valid range
 	skin_index = clamp(skin_index, 0, available_skins.size() - 1)
 	selected_skin_index = skin_index
-	synced_skin_index = skin_index
 	
 	print("Player ", name, " selected skin index: ", skin_index)
 	
-	# Sync to all clients
+	# Set both synced properties
+	synced_skin_index = skin_index
+	synced_mesh_index = skin_index
+	
+	# Broadcast to all players including self
 	_broadcast_skin_selection.rpc(skin_index)
 
 @rpc("call_local", "reliable")
 func _broadcast_skin_selection(skin_index: int) -> void:
 	print("Received skin broadcast for player ", name, ": index ", skin_index)
+	
+	# Set the synced skin index (this will trigger _set_synced_skin_index)
 	synced_skin_index = skin_index
+	synced_mesh_index = skin_index
 	selected_skin_index = skin_index
 	
-	# Apply visibility immediately
-	_apply_skin_visibility()
+	# Force immediate visibility update
+	_update_skin_visibility()
 
-func _wait_and_apply_skin_visibility() -> void:
-	# Wait for skin selection
-	var timeout = 0.0
-	var max_wait = 5.0
+func _update_skin_visibility() -> void:
+	if available_skins.size() == 0:
+		print("No available skins to update visibility for player ", name)
+		return
 	
-	while synced_skin_index == -1 and timeout < max_wait:
-		await get_tree().process_frame
-		timeout += get_process_delta_time()
+	var skin_index_to_use = synced_skin_index if synced_skin_index != -1 else selected_skin_index
 	
-	if synced_skin_index != -1:
-		_apply_skin_visibility()
-		skin_setup_complete = true
-		print("Skin setup complete for player ", name)
-	else:
-		print("Timeout waiting for skin sync for player ", name)
-
-func _apply_skin_visibility() -> void:
-	if available_skins.size() == 0 or selected_skin_index == -1:
+	if skin_index_to_use == -1 or skin_index_to_use >= available_skins.size():
+		print("Invalid skin index for player ", name, ": ", skin_index_to_use)
 		return
 	
 	# Hide all skins first
-	for skin in available_skins:
-		if is_instance_valid(skin):
-			skin.visible = false
+	for i in range(available_skins.size()):
+		if is_instance_valid(available_skins[i]):
+			available_skins[i].visible = false
 	
-	# Determine if this player should be visible
-	# Hide skin for the local player (first person view), show for others
-	var should_show_skin = not is_multiplayer_authority()
+	# FIXED LOGIC: Show skin for remote players, hide for local player
+	var is_local_player = is_multiplayer_authority()
+	var should_show_skin = not is_local_player
 	
-	print("Player ", name, " skin visibility: ", should_show_skin, " (is_local: ", is_multiplayer_authority(), ")")
+	print("Player ", name, " skin visibility decision: ", should_show_skin, " (is_local_player: ", is_local_player, ", authority: ", multiplayer.get_unique_id(), ") using skin index: ", skin_index_to_use)
 	
-	# Show the selected skin if it should be visible
-	if should_show_skin and selected_skin_index < available_skins.size():
-		if is_instance_valid(available_skins[selected_skin_index]):
-			available_skins[selected_skin_index].visible = true
-			print("Showing skin index ", selected_skin_index, " for player ", name)
+	if should_show_skin and is_instance_valid(available_skins[skin_index_to_use]):
+		available_skins[skin_index_to_use].visible = true
+		print("SUCCESS: Showing skin index ", skin_index_to_use, " for player ", name)
+		skin_setup_complete = true
+	else:
+		print("Hiding skin for local player ", name, " (first person view)")
+		skin_setup_complete = true
 
 func _collect_spawn_positions() -> void:
 	spawn_positions.clear()
@@ -249,6 +252,11 @@ func _unhandled_input(event: InputEvent) -> void:
 		else:
 			Input.mouse_mode = Input.MOUSE_MODE_CAPTURED
 			mouse_captured = true
+
+	# Debug key to manually check skin visibility
+	if Input.is_action_just_pressed("ui_select"):  # Space key
+		debug_skin_state()
+		force_refresh_skin_visibility()
 
 func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer != null:
@@ -381,6 +389,37 @@ func _set_synced_skin_index(new_index: int) -> void:
 	synced_skin_index = new_index
 	selected_skin_index = new_index
 	
-	# Only apply if this is a new value and we have skins available
-	if old_index != new_index and available_skins.size() > 0:
-		_apply_skin_visibility()
+	# Only update visibility if this is actually a new value
+	if old_index != new_index:
+		print("Synced skin index changed from ", old_index, " to ", new_index, " for player ", name)
+		# Update visibility immediately when sync changes
+		call_deferred("_update_skin_visibility")
+
+# FIXED: Added the missing synced_mesh_index setter
+func _set_synced_mesh_index(new_index: int) -> void:
+	var old_index = synced_mesh_index
+	synced_mesh_index = new_index
+	
+	# Only update if this is actually a new value
+	if old_index != new_index:
+		print("Synced mesh index changed from ", old_index, " to ", new_index, " for player ", name)
+		# Update visibility when mesh index changes
+		call_deferred("_update_skin_visibility")
+
+# Debug functions
+func debug_skin_state() -> void:
+	print("=== DEBUG SKIN STATE for player ", name, " ===")
+	print("Available skins: ", available_skins.size())
+	print("Selected skin index: ", selected_skin_index)
+	print("Synced skin index: ", synced_skin_index)
+	print("Synced mesh index: ", synced_mesh_index)
+	print("Is multiplayer authority: ", is_multiplayer_authority())
+	print("Skin setup complete: ", skin_setup_complete)
+	for i in range(available_skins.size()):
+		if is_instance_valid(available_skins[i]):
+			print("Skin ", i, " (", available_skins[i].name, ") visible: ", available_skins[i].visible)
+	print("=== END DEBUG ===")
+
+func force_refresh_skin_visibility() -> void:
+	print("Force refreshing skin visibility for player ", name)
+	_update_skin_visibility()
