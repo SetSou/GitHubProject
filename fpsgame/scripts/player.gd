@@ -9,6 +9,11 @@ extends CharacterBody3D
 @onready var synchronizer: MultiplayerSynchronizer = $MultiplayerSynchronizer
 @onready var skeleton: Skeleton3D = $Character_1_2_22/CharacterArmature1/Skeleton3D
 
+# UI Elements for bullet counter
+@onready var bullet_ui: Control
+@onready var bullet_label: Label
+@onready var reload_progress: ProgressBar
+
 ## Number of shots before a player dies
 @export var health: int = 1
 ## Predefined set of colors for the player
@@ -23,6 +28,12 @@ extends CharacterBody3D
 ]
 ## Synced property for player color
 @export var player_color: Color = Color.WHITE : set = _set_player_color
+
+# Bullet system constants
+const MAX_BULLETS = 6  # Pistol magazine size
+const RELOAD_TIME = 2.0  # Seconds to reload
+const RELOAD_ANIMATION = "reload"  # Add this animation to your AnimationPlayer
+const SHOOT_COOLDOWN = 0.1  # Minimum time between shots (prevents double shooting)
 
 # Movement parameters - MUST match NPC values exactly
 const BASE_SPEED = 3.0  # Same as NPC speed
@@ -44,6 +55,13 @@ var spawn_positions: Array[Vector3] = []
 
 # Local variable to track if this player should have a gun visible
 var has_gun_visible: bool = true
+
+# Bullet system variables
+var current_bullets: int = MAX_BULLETS
+var is_reloading: bool = false
+var reload_timer: float = 0.0
+var can_shoot_timer: float = 0.0  # Debounce timer to prevent double shooting
+var last_shot_time: float = 0.0   # Track when we last shot
 
 # Movement state variables to match NPC behavior
 var current_velocity: Vector3 = Vector3.ZERO
@@ -101,6 +119,130 @@ func _ready() -> void:
 		
 		# Setup player role after skin system
 		call_deferred("setup_player_role")
+		
+		# Setup bullet counter UI for the host (gun player)
+		call_deferred("setup_bullet_ui")
+
+func setup_bullet_ui() -> void:
+	# Only show bullet UI for the player with the gun
+	if not has_gun():
+		return
+	
+	# Create UI elements
+	bullet_ui = Control.new()
+	bullet_ui.name = "BulletUI"
+	bullet_ui.set_anchors_and_offsets_preset(Control.PRESET_TOP_RIGHT)
+	bullet_ui.position = Vector2(-150, 20)
+	bullet_ui.size = Vector2(130, 80)
+	
+	# Create bullet counter label
+	bullet_label = Label.new()
+	bullet_label.name = "BulletLabel"
+	bullet_label.text = str(current_bullets) + " / " + str(MAX_BULLETS)
+	bullet_label.add_theme_font_size_override("font_size", 24)
+	bullet_label.add_theme_color_override("font_color", Color.WHITE)
+	bullet_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	bullet_label.add_theme_constant_override("shadow_offset_x", 2)
+	bullet_label.add_theme_constant_override("shadow_offset_y", 2)
+	bullet_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	bullet_label.size = Vector2(130, 30)
+	
+	# Create reload progress bar
+	reload_progress = ProgressBar.new()
+	reload_progress.name = "ReloadProgress"
+	reload_progress.position = Vector2(0, 35)
+	reload_progress.size = Vector2(130, 20)
+	reload_progress.min_value = 0
+	reload_progress.max_value = RELOAD_TIME
+	reload_progress.value = 0
+	reload_progress.visible = false
+	
+	# Add a background for better visibility
+	var panel = Panel.new()
+	panel.name = "Background"
+	panel.position = Vector2(-5, -5)
+	panel.size = Vector2(140, 90)
+	panel.modulate = Color(0, 0, 0, 0.5)
+	
+	# Build UI hierarchy
+	bullet_ui.add_child(panel)
+	bullet_ui.add_child(bullet_label)
+	bullet_ui.add_child(reload_progress)
+	
+	# Add to scene
+	get_tree().current_scene.add_child(bullet_ui)
+	
+	print("Bullet UI created for host player")
+
+func _process(delta: float) -> void:
+	sensitivity = Global.sensitivity
+	controller_sensitivity = Global.controller_sensitivity
+	rotate_y(-axis_vector.x * controller_sensitivity)
+	camera.rotate_x(-axis_vector.y * controller_sensitivity)
+	camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
+	
+	# Handle reload timer and UI updates
+	if is_reloading:
+		reload_timer -= delta
+		if reload_progress:
+			reload_progress.value = RELOAD_TIME - reload_timer
+		
+		if reload_timer <= 0:
+			complete_reload()
+	
+	# Update shoot cooldown timer
+	if can_shoot_timer > 0:
+		can_shoot_timer -= delta
+
+func complete_reload() -> void:
+	is_reloading = false
+	current_bullets = MAX_BULLETS
+	reload_timer = 0.0
+	
+	if reload_progress:
+		reload_progress.visible = false
+	
+	update_bullet_ui()
+	print("Reload complete! Bullets: ", current_bullets)
+
+func start_reload() -> void:
+	if is_reloading or current_bullets == MAX_BULLETS:
+		return
+	
+	is_reloading = true
+	reload_timer = RELOAD_TIME
+	
+	if reload_progress:
+		reload_progress.visible = true
+		reload_progress.value = 0
+	
+	# Play reload animation if available
+	if anim_player.has_animation(RELOAD_ANIMATION):
+		anim_player.play(RELOAD_ANIMATION)
+		current_animation_name = RELOAD_ANIMATION
+	
+	print("Starting reload...")
+
+func update_bullet_ui() -> void:
+	if bullet_label:
+		bullet_label.text = str(current_bullets) + " / " + str(MAX_BULLETS)
+		
+		# Change color based on bullet count
+		if current_bullets == 0:
+			bullet_label.add_theme_color_override("font_color", Color.RED)
+		elif current_bullets <= 2:
+			bullet_label.add_theme_color_override("font_color", Color.ORANGE)
+		else:
+			bullet_label.add_theme_color_override("font_color", Color.WHITE)
+
+func can_shoot() -> bool:
+	var time_since_last_shot = Time.get_ticks_msec() - last_shot_time
+	
+	return (has_gun() and 
+			current_bullets > 0 and 
+			not is_reloading and 
+			can_shoot_timer <= 0 and
+			time_since_last_shot >= (SHOOT_COOLDOWN * 1000))  # Convert to milliseconds
 
 func _setup_skin_system() -> void:
 	print("Setting up skin system for player: ", name, " | Authority: ", multiplayer.get_unique_id(), " | Is local: ", is_multiplayer_authority())
@@ -227,13 +369,6 @@ func get_random_spawn_position() -> Vector3:
 		return Vector3.ZERO
 	return spawn_positions[randi() % spawn_positions.size()]
 
-func _process(_delta: float) -> void:
-	sensitivity = Global.sensitivity
-	controller_sensitivity = Global.controller_sensitivity
-	rotate_y(-axis_vector.x * controller_sensitivity)
-	camera.rotate_x(-axis_vector.y * controller_sensitivity)
-	camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
-
 func _unhandled_input(event: InputEvent) -> void:
 	if not is_multiplayer_authority():
 		return
@@ -244,15 +379,39 @@ func _unhandled_input(event: InputEvent) -> void:
 		camera.rotate_x(-event.relative.y * sensitivity)
 		camera.rotation.x = clamp(camera.rotation.x, -PI/2, PI/2)
 
-	if Input.is_action_just_pressed("shoot") and anim_player.current_animation != SHOOT_ANIMATION and has_gun():
-		play_shoot_effects.rpc()
-		gunshot_sound.play()
-		if raycast.is_colliding():
-			var hit_collider = raycast.get_collider()
-			if hit_collider and hit_collider is CharacterBody3D:
-				var target_id = hit_collider.get_multiplayer_authority()
-				print("Hit collider: ", hit_collider, " | Authority: ", target_id)
-				hit_collider.recieve_damage.rpc_id(target_id, 1)
+	# Modified shooting logic with bullet counter and debouncing
+	if Input.is_action_just_pressed("shoot"):
+		if can_shoot() and anim_player.current_animation != SHOOT_ANIMATION:
+			# Set cooldown timer to prevent double shooting
+			can_shoot_timer = SHOOT_COOLDOWN
+			last_shot_time = Time.get_ticks_msec()
+			
+			# Consume a bullet
+			current_bullets -= 1
+			update_bullet_ui()
+			
+			print("Shot fired! Bullets remaining: ", current_bullets, " | Time: ", Time.get_ticks_msec())
+			
+			# Play shoot effects
+			play_shoot_effects.rpc()
+			gunshot_sound.play()
+			
+			# Handle raycast collision
+			if raycast.is_colliding():
+				var hit_collider = raycast.get_collider()
+				if hit_collider and hit_collider is CharacterBody3D:
+					var target_id = hit_collider.get_multiplayer_authority()
+					print("Hit collider: ", hit_collider, " | Authority: ", target_id)
+					hit_collider.recieve_damage.rpc_id(target_id, 1)
+			
+		elif current_bullets == 0 and not is_reloading:
+			print("Out of ammo! Press R to reload")
+		elif can_shoot_timer > 0:
+			print("Shooting too fast! Cooldown: ", can_shoot_timer)
+
+	# Reload input
+	if Input.is_action_just_pressed("ui_cancel"):  # R key (you can map this to "reload" action)
+		start_reload()
 
 	if Input.is_action_just_pressed("respawn"):
 		recieve_damage(2)
@@ -318,8 +477,8 @@ func _update_player_animations() -> void:
 		print("ERROR: AnimationPlayer is null!")
 		return
 	
-	# Don't interrupt shoot animation
-	if anim_player.current_animation == SHOOT_ANIMATION:
+	# Don't interrupt shoot or reload animations
+	if anim_player.current_animation == SHOOT_ANIMATION or anim_player.current_animation == RELOAD_ANIMATION:
 		return
 	
 	var desired_animation: String
@@ -397,6 +556,17 @@ func recieve_damage(damage: int = 1) -> void:
 		health = 1
 		position = get_random_spawn_position()
 		assign_player_color()
+		
+		# Reset bullets on respawn for host
+		if is_multiplayer_authority() and has_gun():
+			current_bullets = MAX_BULLETS
+			is_reloading = false
+			reload_timer = 0.0
+			can_shoot_timer = 0.0  # Reset cooldown on respawn
+			last_shot_time = 0.0
+			if reload_progress:
+				reload_progress.visible = false
+			update_bullet_ui()
 		
 		# Add random skin selection on respawn for clients (non-host players)
 		if is_multiplayer_authority() and not multiplayer.is_server():
