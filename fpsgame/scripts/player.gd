@@ -84,6 +84,15 @@ var is_moving_for_animation: bool = false
 @export var synced_skin_index: int = -1 : set = _set_synced_skin_index
 @export var synced_mesh_index: int = -1 : set = _set_synced_mesh_index
 
+# ATM ROBBERY SYSTEM - NEW VARIABLES
+var player_money: int = 0
+var nearby_atm: Node = null
+var is_robbing_atm: bool = false
+
+# Money UI elements
+var money_ui: Control
+var money_label: Label
+
 func _enter_tree() -> void:
 	set_multiplayer_authority(str(name).to_int())
 
@@ -122,6 +131,9 @@ func _ready() -> void:
 		
 		# Setup bullet counter UI for the host (gun player)
 		call_deferred("setup_bullet_ui")
+		
+		# Setup money UI for clients (robbers)
+		call_deferred("setup_money_ui")
 
 func setup_bullet_ui() -> void:
 	# Only show bullet UI for the player with the gun
@@ -173,6 +185,72 @@ func setup_bullet_ui() -> void:
 	get_tree().current_scene.add_child(bullet_ui)
 	
 	print("Bullet UI created for host player")
+
+# ATM ROBBERY SYSTEM - NEW FUNCTION
+func setup_money_ui() -> void:
+	# Only show money UI for clients (robbers)
+	if multiplayer.is_server():
+		return
+	
+	# Create UI elements
+	money_ui = Control.new()
+	money_ui.name = "MoneyUI"
+	money_ui.set_anchors_and_offsets_preset(Control.PRESET_TOP_LEFT)
+	money_ui.position = Vector2(20, 20)
+	money_ui.size = Vector2(200, 50)
+	
+	# Create money label
+	money_label = Label.new()
+	money_label.name = "MoneyLabel"
+	money_label.text = "$" + str(player_money)
+	money_label.add_theme_font_size_override("font_size", 32)
+	money_label.add_theme_color_override("font_color", Color.GREEN)
+	money_label.add_theme_color_override("font_shadow_color", Color.BLACK)
+	money_label.add_theme_constant_override("shadow_offset_x", 2)
+	money_label.add_theme_constant_override("shadow_offset_y", 2)
+	money_label.horizontal_alignment = HORIZONTAL_ALIGNMENT_LEFT
+	money_label.size = Vector2(200, 40)
+	
+	# Add a background for better visibility
+	var panel = Panel.new()
+	panel.name = "Background"
+	panel.position = Vector2(-5, -5)
+	panel.size = Vector2(210, 60)
+	panel.modulate = Color(0, 0, 0, 0.5)
+	
+	# Build UI hierarchy
+	money_ui.add_child(panel)
+	money_ui.add_child(money_label)
+	
+	# Add to scene
+	get_tree().current_scene.add_child(money_ui)
+	
+	print("Money UI created for client player")
+
+# ATM ROBBERY SYSTEM - NEW FUNCTION
+func add_money(amount: int) -> void:
+	player_money += amount
+	update_money_ui()
+	print("Added $", amount, " | Total: $", player_money)
+
+# ATM ROBBERY SYSTEM - NEW FUNCTION
+func update_money_ui() -> void:
+	if money_label:
+		money_label.text = "$" + str(player_money)
+		
+		# Flash yellow animation when money is added
+		var tween = create_tween()
+		tween.tween_property(money_label, "modulate", Color.YELLOW, 0.2)
+		tween.tween_property(money_label, "modulate", Color.GREEN, 0.2)
+
+# ATM ROBBERY SYSTEM - NEW FUNCTION
+func set_nearby_atm(atm: Node) -> void:
+	nearby_atm = atm
+
+# ATM ROBBERY SYSTEM - NEW FUNCTION
+func clear_nearby_atm() -> void:
+	nearby_atm = null
+	is_robbing_atm = false
 
 func _process(delta: float) -> void:
 	sensitivity = Global.sensitivity
@@ -410,8 +488,35 @@ func _unhandled_input(event: InputEvent) -> void:
 			print("Shooting too fast! Cooldown: ", can_shoot_timer)
 
 	# Reload input
-	if Input.is_action_just_pressed("ui_cancel"):  # R key (you can map this to "reload" action)
+	if Input.is_action_just_pressed("reload"):
 		start_reload()
+
+	# ATM ROBBERY SYSTEM - NEW INPUT HANDLING
+	# ATM robbery input (E key)
+	if Input.is_action_just_pressed("rob"):
+		print("[PLAYER] E key pressed - nearby_atm: ", nearby_atm, " | has_gun: ", has_gun(), " | is_robbing: ", is_robbing_atm)
+		if nearby_atm and not has_gun():  # Only clients can rob
+			if not is_robbing_atm:
+				print("[PLAYER] Attempting to start robbery...")
+				# Start robbery
+				if nearby_atm.has_method("start_robbery"):
+					nearby_atm.start_robbery(self)
+					is_robbing_atm = true
+					print("[PLAYER] Robbery started!")
+				else:
+					print("[PLAYER] ERROR: nearby_atm doesn't have start_robbery method!")
+		elif has_gun():
+			print("[PLAYER] Cannot rob - you're the host with the gun!")
+		elif not nearby_atm:
+			print("[PLAYER] Cannot rob - no ATM nearby!")
+	
+	# Cancel robbery if player releases E or moves away
+	if Input.is_action_just_released("rob"):
+		if is_robbing_atm and nearby_atm:
+			print("[PLAYER] E key released - cancelling robbery")
+			if nearby_atm.has_method("_cancel_robbery"):
+				nearby_atm._cancel_robbery()
+			is_robbing_atm = false
 
 	if Input.is_action_just_pressed("respawn"):
 		recieve_damage(2)
@@ -428,6 +533,24 @@ func _unhandled_input(event: InputEvent) -> void:
 	if Input.is_action_just_pressed("ui_select"):  # Space key
 		debug_skin_state()
 		force_refresh_skin_visibility()
+		
+		# Also check for nearby ATMs
+		print("[PLAYER DEBUG] Checking for nearby ATMs...")
+		var space_state = get_world_3d().direct_space_state
+		var query = PhysicsShapeQueryParameters3D.new()
+		var sphere = SphereShape3D.new()
+		sphere.radius = 5.0
+		query.shape = sphere
+		query.transform = global_transform
+		query.collision_mask = 0xFFFFFFFF  # Check all layers
+		
+		var results = space_state.intersect_shape(query, 32)
+		print("[PLAYER DEBUG] Found ", results.size(), " nearby objects")
+		for result in results:
+			var collider = result.collider
+			print("  - ", collider.name, " at distance: ", global_position.distance_to(collider.global_position))
+			if collider.has_method("debug_check_bodies"):
+				collider.debug_check_bodies()
 
 func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer != null:
@@ -472,9 +595,8 @@ func _physics_process(delta: float) -> void:
 	move_and_slide()
 
 func _update_player_animations() -> void:
-	# Debug: Check if animation player exists
+	# Check if animation player exists
 	if not anim_player:
-		print("ERROR: AnimationPlayer is null!")
 		return
 	
 	# Don't interrupt shoot or reload animations
@@ -487,59 +609,37 @@ func _update_player_animations() -> void:
 	if has_gun():
 		# Host uses pistol animations
 		desired_animation = HOST_WALK_ANIMATION if is_moving_for_animation else HOST_IDLE_ANIMATION
-		print("DEBUG: Host player - desired animation: ", desired_animation, " | moving: ", is_moving_for_animation)
 	else:
 		# Client uses regular animations
 		desired_animation = CLIENT_WALK_ANIMATION if is_moving_for_animation else CLIENT_IDLE_ANIMATION
-		print("DEBUG: Client player - desired animation: ", desired_animation, " | moving: ", is_moving_for_animation)
 	
 	# Only change animation if it's different from current
 	if desired_animation != current_animation_name:
-		print("DEBUG: Changing animation from '", current_animation_name, "' to '", desired_animation, "'")
 		_play_player_animation(desired_animation)
-	else:
-		# Debug: Show current state even when not changing
-		print("DEBUG: Keeping current animation: ", current_animation_name)
 
 func _play_player_animation(animation_name: String) -> void:
 	if not anim_player:
-		print("ERROR: AnimationPlayer is null!")
 		return
-	
-	# Debug: List all available animations
-	print("DEBUG: Available animations in AnimationPlayer:")
-	var animation_list = anim_player.get_animation_list()
-	for anim_name in animation_list:
-		print("  - ", anim_name)
 	
 	# Check if the animation exists
 	if not anim_player.has_animation(animation_name):
-		print("ERROR: Animation '", animation_name, "' not found for player!")
-		print("DEBUG: Trying fallback animations...")
-		
 		# Try common fallback names
 		var fallbacks = ["idle", "walk", "Idle", "Walk", "default"]
 		for fallback in fallbacks:
 			if anim_player.has_animation(fallback):
-				print("DEBUG: Using fallback animation: ", fallback)
 				animation_name = fallback
 				break
 		
 		if not anim_player.has_animation(animation_name):
-			print("ERROR: No suitable animation found!")
 			return
 	
 	current_animation_name = animation_name
 	
 	# Play the animation with smooth transition
 	if anim_player.current_animation != "":
-		print("DEBUG: Playing animation with transition: ", animation_name)
 		anim_player.play(animation_name, ANIMATION_TRANSITION_SPEED)
 	else:
-		print("DEBUG: Playing animation: ", animation_name)
 		anim_player.play(animation_name)
-	
-	print("SUCCESS: Playing animation: ", animation_name, " for player (has_gun: ", has_gun(), ")")
 
 @rpc("call_local")
 func play_shoot_effects() -> void:
@@ -639,9 +739,9 @@ func _set_player_color(new_color: Color) -> void:
 			material = StandardMaterial3D.new()
 			mesh_instance.set_surface_override_material(0, material)
 		material.albedo_color = new_color
-		print("Player color set to: ", new_color, " for peer: ", multiplayer.get_unique_id())
-	else:
-		print("ERROR: MeshInstance3D is null for peer: ", multiplayer.get_unique_id())
+		#print("Player color set to: ", new_color, " for peer: ", multiplayer.get_unique_id())
+	#else:
+		#print("ERROR: MeshInstance3D is null for peer: ", multiplayer.get_unique_id())
 
 func _set_synced_skin_index(new_index: int) -> void:
 	var old_index = synced_skin_index
