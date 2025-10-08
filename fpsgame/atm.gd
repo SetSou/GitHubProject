@@ -18,6 +18,7 @@ var rob_progress: float = 0.0
 var is_on_cooldown: bool = false
 var cooldown_progress: float = 0.0
 var current_robber: Node = null
+var color_tween: Tween = null  # Store tween reference to stop it later
 
 # UI elements
 var ui_container: Control
@@ -42,7 +43,7 @@ func _ready() -> void:
 		collision_shape.shape = sphere_shape
 		interaction_area.add_child(collision_shape)
 		
-		print("[ATM] Created InteractionArea with radius: ", interaction_distance)
+		#print("[ATM] Created InteractionArea with radius: ", interaction_distance)
 	
 	# CRITICAL: Set collision layers so it can detect players
 	# Layer 0 means it's not on any layer (doesn't collide with anything physically)
@@ -55,17 +56,17 @@ func _ready() -> void:
 	interaction_area.monitorable = false  # Other areas don't need to detect this
 	interaction_area.monitoring = true    # This area monitors for bodies
 	
-	print("[ATM] InteractionArea collision setup complete")
-	print("[ATM] Monitoring: ", interaction_area.monitoring, " | Monitorable: ", interaction_area.monitorable)
+	#print("[ATM] InteractionArea collision setup complete")
+	#print("[ATM] Monitoring: ", interaction_area.monitoring, " | Monitorable: ", interaction_area.monitorable)
 	
 	# Connect signals
 	if not interaction_area.body_entered.is_connected(_on_body_entered):
 		interaction_area.body_entered.connect(_on_body_entered)
-		print("[ATM] Connected body_entered signal")
+		#print("[ATM] Connected body_entered signal")
 	
 	if not interaction_area.body_exited.is_connected(_on_body_exited):
 		interaction_area.body_exited.connect(_on_body_exited)
-		print("[ATM] Connected body_exited signal")
+		#print("[ATM] Connected body_exited signal")
 	
 	# Setup 3D label for world space status
 	_setup_world_label()
@@ -84,20 +85,12 @@ func _ready() -> void:
 	set_collision_mask_value(1, true)
 	set_collision_mask_value(2, false)
 	
-	print("[ATM] Ready! Position: ", global_position)
+	#print("[ATM] Ready! Position: ", global_position)
 
 func _setup_world_label() -> void:
-	status_label = Label3D.new()
-	status_label.name = "StatusLabel"
-	status_label.pixel_size = 0.01
-	status_label.billboard = BaseMaterial3D.BILLBOARD_ENABLED
-	status_label.position = Vector3(0, 2.5, 0)
-	status_label.modulate = Color.GREEN
-	status_label.outline_size = 8
-	status_label.font_size = 32
-	status_label.text = "Press E to Rob"
-	status_label.visible = false
-	add_child(status_label)
+	# Don't create 3D label - we'll use 2D UI instead
+	# The 3D label is visible to all players, which we don't want
+	pass
 
 func _process(delta: float) -> void:
 	# Handle cooldown
@@ -105,15 +98,13 @@ func _process(delta: float) -> void:
 		cooldown_progress -= delta
 		synced_cooldown = cooldown_progress
 		
-		if status_label:
-			status_label.text = "Cooldown: " + str(int(cooldown_progress)) + "s"
-			status_label.modulate = Color.RED
+		# Update cooldown text if UI exists
+		if status_ui and ui_container:
+			status_ui.text = "ATM on cooldown: " + str(int(cooldown_progress)) + "s"
 		
 		if cooldown_progress <= 0:
 			is_on_cooldown = false
 			synced_is_robbed = false
-			if status_label:
-				status_label.visible = false
 		return
 	
 	# Handle robbery progress
@@ -124,88 +115,83 @@ func _process(delta: float) -> void:
 		if progress_ui:
 			progress_ui.value = (rob_progress / rob_time) * 100
 		
-		if status_label:
-			status_label.text = "Robbing... " + str(int((rob_progress / rob_time) * 100)) + "%"
-			status_label.modulate = Color.YELLOW
+		if status_ui:
+			status_ui.text = "Robbing... " + str(int((rob_progress / rob_time) * 100)) + "%"
 		
 		# Check if robbery complete
 		if rob_progress >= rob_time:
 			_complete_robbery()
 
 func _on_body_entered(body: Node3D) -> void:
-	print("[ATM] Body entered detection area: ", body.name, " (Type: ", body.get_class(), ")")
-	print("[ATM] Body position: ", body.global_position, " | ATM position: ", global_position)
-	print("[ATM] Distance: ", body.global_position.distance_to(global_position))
+	#print("[ATM] Body entered detection area: ", body.name, " (Type: ", body.get_class(), ")")
+	#print("[ATM] Body position: ", body.global_position, " | ATM position: ", global_position)
+	#print("[ATM] Distance: ", body.global_position.distance_to(global_position))
 	
 	# Check if it's a CharacterBody3D (player type)
 	if not body is CharacterBody3D:
-		print("[ATM] Not a CharacterBody3D, ignoring")
+		#print("[ATM] Not a CharacterBody3D, ignoring")
 		return
 	
 	# Check if it has the has_gun method (player check)
 	if not body.has_method("has_gun"):
-		print("[ATM] Not a player (no has_gun method), ignoring")
+		#print("[ATM] Not a player (no has_gun method), ignoring")
 		return
 	
-	print("[ATM] Valid player detected!")
+	#print("[ATM] Valid player detected!")
 	
 	# Check if it's a client (not host)
 	if body.has_gun():
-		print("[ATM] Host player detected - cannot rob ATMs")
+		#print("[ATM] Host player detected - cannot rob ATMs")
+		# Don't show any UI or labels to the host
 		return
 	
-	print("[ATM] Client player detected!")
+	#print("[ATM] Client player detected!")
 	
 	# Check ATM availability
 	if is_on_cooldown:
-		print("[ATM] ATM is on cooldown")
-		if status_label:
-			status_label.visible = true
-			status_label.text = "Cooldown: " + str(int(cooldown_progress)) + "s"
-			status_label.modulate = Color.RED
+		#print("[ATM] ATM is on cooldown")
+		# Only create UI for clients showing cooldown
+		if body.is_multiplayer_authority():
+			_create_cooldown_ui(body)
 		return
 	
 	if is_being_robbed:
-		print("[ATM] ATM is already being robbed")
+		#print("[ATM] ATM is already being robbed")
 		return
 	
 	# ATM is available!
-	print("[ATM] ATM is available for robbery!")
-	
-	if status_label:
-		status_label.visible = true
-		status_label.text = "Press E to Rob"
-		status_label.modulate = Color.GREEN
+	#print("[ATM] ATM is available for robbery!")
 	
 	# Tell the player about this ATM
 	if body.has_method("set_nearby_atm"):
 		body.set_nearby_atm(self)
-		print("[ATM] Notified player about nearby ATM")
+		#print("[ATM] Notified player about nearby ATM")
 	
-	# Create UI for the player
+	# Create UI for the player (only if they're the authority/owner)
 	if body.is_multiplayer_authority():
 		_create_robbery_ui(body)
-		print("[ATM] Created robbery UI for player")
+		#print("[ATM] Created robbery UI for player")
 
 func _on_body_exited(body: Node3D) -> void:
-	print("[ATM] Body exited detection area: ", body.name)
+	#print("[ATM] Body exited detection area: ", body.name)
 	
 	if body == current_robber:
 		_cancel_robbery()
 	
 	if body.has_method("has_gun"):
-		if status_label and not is_being_robbed and not is_on_cooldown:
-			status_label.visible = false
+		# Don't do anything for host player
+		if body.has_gun():
+			return
 		
 		# Tell player they left the ATM
 		if body.has_method("clear_nearby_atm"):
 			body.clear_nearby_atm()
-			print("[ATM] Player left ATM area")
+			#print("[ATM] Player left ATM area")
 		
 		# Remove UI
 		if body.is_multiplayer_authority():
 			_remove_robbery_ui()
-			print("[ATM] Removed robbery UI")
+			#print("[ATM] Removed robbery UI")
 
 func _create_robbery_ui(player: Node) -> void:
 	# Create UI container
@@ -228,7 +214,7 @@ func _create_robbery_ui(player: Node) -> void:
 	status_ui.position = Vector2(10, 10)
 	status_ui.size = Vector2(280, 30)
 	status_ui.add_theme_font_size_override("font_size", 18)
-	status_ui.add_theme_color_override("font_color", Color.WHITE)
+	status_ui.add_theme_color_override("font_color", Color.GREEN)
 	ui_container.add_child(status_ui)
 	
 	# Create progress bar
@@ -245,23 +231,50 @@ func _create_robbery_ui(player: Node) -> void:
 	# Add to scene
 	get_tree().current_scene.add_child(ui_container)
 
+func _create_cooldown_ui(player: Node) -> void:
+	# Create simple cooldown UI
+	ui_container = Control.new()
+	ui_container.name = "ATM_UI"
+	ui_container.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
+	ui_container.position = Vector2(-150, 200)
+	ui_container.size = Vector2(300, 60)
+	
+	# Create background panel
+	var panel = Panel.new()
+	panel.size = Vector2(300, 60)
+	panel.modulate = Color(0, 0, 0, 0.7)
+	ui_container.add_child(panel)
+	
+	# Create status label
+	status_ui = Label.new()
+	status_ui.name = "StatusLabel"
+	status_ui.text = "ATM on cooldown: " + str(int(cooldown_progress)) + "s"
+	status_ui.position = Vector2(10, 15)
+	status_ui.size = Vector2(280, 30)
+	status_ui.add_theme_font_size_override("font_size", 18)
+	status_ui.add_theme_color_override("font_color", Color.RED)
+	ui_container.add_child(status_ui)
+	
+	# Add to scene
+	get_tree().current_scene.add_child(ui_container)
+
 func _remove_robbery_ui() -> void:
 	if ui_container and is_instance_valid(ui_container):
 		ui_container.queue_free()
 		ui_container = null
 
 func start_robbery(robber: Node) -> void:
-	print("[ATM] start_robbery called by: ", robber.name)
+	#print("[ATM] start_robbery called by: ", robber.name)
 	
 	if is_on_cooldown:
-		print("[ATM] Cannot start - ATM on cooldown")
+		#print("[ATM] Cannot start - ATM on cooldown")
 		return
 	
 	if is_being_robbed:
-		print("[ATM] Cannot start - ATM already being robbed")
+		#print("[ATM] Cannot start - ATM already being robbed")
 		return
 	
-	print("[ATM] Starting robbery!")
+	#print("[ATM] Starting robbery!")
 	is_being_robbed = true
 	current_robber = robber
 	rob_progress = 0.0
@@ -269,24 +282,28 @@ func start_robbery(robber: Node) -> void:
 	if progress_ui:
 		progress_ui.visible = true
 		progress_ui.value = 0
-		print("[ATM] Progress UI shown")
+		#print("[ATM] Progress UI shown")
 	
 	if status_ui:
 		status_ui.text = "Robbing ATM... Hold E!"
-		print("[ATM] Status UI updated")
+		#print("[ATM] Status UI updated")
 	
 	# Visual feedback - change ATM material color
 	if atm_mesh:
+		# Stop any existing tween
+		if color_tween:
+			color_tween.kill()
+		
 		var material = atm_mesh.get_active_material(0)
 		if material:
 			# Create a tween to flash the material color
-			var tween = create_tween()
-			tween.set_loops()
-			tween.tween_method(_set_atm_color, Color.WHITE, Color.RED, 0.5)
-			tween.tween_method(_set_atm_color, Color.RED, Color.WHITE, 0.5)
-			print("[ATM] Started flashing animation")
+			color_tween = create_tween()
+			color_tween.set_loops()
+			color_tween.tween_method(_set_atm_color, Color.WHITE, Color.RED, 0.5)
+			color_tween.tween_method(_set_atm_color, Color.RED, Color.WHITE, 0.5)
+			#print("[ATM] Started flashing animation")
 	
-	print("[ATM] Robbery started successfully!")
+	#print("[ATM] Robbery started successfully!")
 
 # Helper function to change ATM color
 func _set_atm_color(color: Color) -> void:
@@ -303,6 +320,11 @@ func _cancel_robbery() -> void:
 	rob_progress = 0.0
 	current_robber = null
 	
+	# Stop the flashing animation
+	if color_tween:
+		color_tween.kill()
+		color_tween = null
+	
 	if progress_ui:
 		progress_ui.visible = false
 		progress_ui.value = 0
@@ -310,11 +332,11 @@ func _cancel_robbery() -> void:
 	if status_ui:
 		status_ui.text = "Robbery cancelled!"
 	
-	# Reset ATM appearance
+	# Reset ATM appearance to white
 	if atm_mesh:
 		_set_atm_color(Color.WHITE)
 	
-	print("Robbery cancelled")
+	#print("[ATM] Robbery cancelled")
 
 func _complete_robbery() -> void:
 	is_being_robbed = false
@@ -322,6 +344,11 @@ func _complete_robbery() -> void:
 	cooldown_progress = cooldown_time
 	synced_is_robbed = true
 	synced_cooldown = cooldown_progress
+	
+	# Stop the flashing animation
+	if color_tween:
+		color_tween.kill()
+		color_tween = null
 	
 	# Give money to robber
 	if current_robber and current_robber.has_method("add_money"):
@@ -333,11 +360,6 @@ func _complete_robbery() -> void:
 	if progress_ui:
 		progress_ui.visible = false
 	
-	if status_label:
-		status_label.text = "Robbed! Cooldown: " + str(int(cooldown_progress)) + "s"
-		status_label.modulate = Color.RED
-		status_label.visible = true
-	
 	# Reset ATM appearance to gray
 	if atm_mesh:
 		_set_atm_color(Color.GRAY)
@@ -347,7 +369,7 @@ func _complete_robbery() -> void:
 		sync_robbery_complete.rpc()
 	
 	current_robber = null
-	print("Robbery complete! Awarded $", money_reward)
+	#print("[ATM] Robbery complete! Awarded $", money_reward)
 	
 	# Remove UI after delay
 	await get_tree().create_timer(2.0).timeout
@@ -357,10 +379,6 @@ func _complete_robbery() -> void:
 func sync_robbery_complete() -> void:
 	if atm_mesh:
 		_set_atm_color(Color.GRAY)
-	
-	if status_label:
-		status_label.text = "Robbed!"
-		status_label.modulate = Color.RED
 
 func _set_synced_is_robbed(new_value: bool) -> void:
 	synced_is_robbed = new_value
@@ -374,10 +392,10 @@ func _set_synced_cooldown(new_value: float) -> void:
 func debug_check_bodies() -> void:
 	if interaction_area:
 		var bodies = interaction_area.get_overlapping_bodies()
-		print("[ATM DEBUG] Bodies in interaction area: ", bodies.size())
-		for body in bodies:
-			print("  - ", body.name, " (Type: ", body.get_class(), ")")
-			if body.has_method("has_gun"):
-				print("    Has has_gun method! Value: ", body.has_gun())
-	else:
-		print("[ATM DEBUG] No interaction area!")
+		#print("[ATM DEBUG] Bodies in interaction area: ", bodies.size())
+		#for body in bodies:
+			#print("  - ", body.name, " (Type: ", body.get_class(), ")")
+			#if body.has_method("has_gun"):
+				#print("    Has has_gun method! Value: ", body.has_gun())
+	#else:
+		#print("[ATM DEBUG] No interaction area!")

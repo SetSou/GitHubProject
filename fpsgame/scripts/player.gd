@@ -2,7 +2,7 @@ extends CharacterBody3D
 
 @onready var camera: Camera3D = $Camera3D
 @onready var anim_player: AnimationPlayer = $AnimationPlayer
-@onready var muzzle_flash: GPUParticles3D = $Camera3D/pistol/GPUParticles3D
+@onready var muzzle_flash: GPUParticles3D = $pistol/GPUParticles3D
 @onready var raycast: RayCast3D = $Camera3D/RayCast3D
 @onready var gunshot_sound: AudioStreamPlayer3D = %GunshotSound
 @onready var mesh_instance: MeshInstance3D = $MeshInstance3D
@@ -79,10 +79,13 @@ var skin_setup_complete: bool = false
 # Animation variables
 var current_animation_name: String = ""
 var is_moving_for_animation: bool = false
+var is_host_player: bool = false  # Track if this is the host player
 
 # FIXED: Added the missing synced properties that the MultiplayerSynchronizer expects
 @export var synced_skin_index: int = -1 : set = _set_synced_skin_index
 @export var synced_mesh_index: int = -1 : set = _set_synced_mesh_index
+@export var synced_velocity: Vector3 = Vector3.ZERO : set = _set_synced_velocity
+@export var synced_is_moving: bool = false : set = _set_synced_is_moving
 
 # ATM ROBBERY SYSTEM - NEW VARIABLES
 var player_money: int = 0
@@ -555,6 +558,8 @@ func _unhandled_input(event: InputEvent) -> void:
 func _physics_process(delta: float) -> void:
 	if multiplayer.multiplayer_peer != null:
 		if not is_multiplayer_authority():
+			# Remote players should still play animations based on synced data
+			_update_remote_player_animations()
 			return
 	
 	# Apply gravity - same as NPCs
@@ -587,12 +592,50 @@ func _physics_process(delta: float) -> void:
 	velocity.z = current_velocity.z
 	
 	# Update movement state for animation
-	is_moving_for_animation = input_dir != Vector2.ZERO and is_on_floor()
+	var new_moving_state = input_dir != Vector2.ZERO and is_on_floor()
+	
+	# Only sync when movement state changes
+	if new_moving_state != is_moving_for_animation:
+		is_moving_for_animation = new_moving_state
+		# Broadcast movement state change to all players
+		sync_movement_state.rpc(is_moving_for_animation)
+		print("[LOCAL] Movement state changed to: ", is_moving_for_animation)
 	
 	# Handle animations - NEW ANIMATION SYSTEM
 	_update_player_animations()
 	
 	move_and_slide()
+
+@rpc("any_peer", "call_local", "unreliable")
+func sync_movement_state(is_moving: bool) -> void:
+	synced_is_moving = is_moving
+	print("[RPC] Received movement state for ", name, ": ", is_moving)
+
+func _update_remote_player_animations() -> void:
+	# For remote players, use the synced movement state
+	if not anim_player:
+		return
+	
+	# Don't interrupt shoot or reload animations
+	if anim_player.current_animation == SHOOT_ANIMATION or anim_player.current_animation == RELOAD_ANIMATION:
+		return
+	
+	var desired_animation: String
+	
+	# Remote players use is_host_player to determine animation set
+	if is_host_player:
+		desired_animation = HOST_WALK_ANIMATION if synced_is_moving else HOST_IDLE_ANIMATION
+	else:
+		desired_animation = CLIENT_WALK_ANIMATION if synced_is_moving else CLIENT_IDLE_ANIMATION
+	
+	# Only change animation if it's different from current
+	if desired_animation != current_animation_name:
+		print("[REMOTE] Changing animation for ", name, " (is_host: ", is_host_player, ") to: ", desired_animation)
+		_play_player_animation(desired_animation)
+	
+	# Force animation to keep playing if it stopped
+	if not anim_player.is_playing() and current_animation_name != "":
+		anim_player.play(current_animation_name)
 
 func _update_player_animations() -> void:
 	# Check if animation player exists
@@ -605,8 +648,8 @@ func _update_player_animations() -> void:
 	
 	var desired_animation: String
 	
-	# Determine which animation set to use based on player role
-	if has_gun():
+	# Determine which animation set to use based on whether this is the host player
+	if is_host_player:
 		# Host uses pistol animations
 		desired_animation = HOST_WALK_ANIMATION if is_moving_for_animation else HOST_IDLE_ANIMATION
 	else:
@@ -616,6 +659,10 @@ func _update_player_animations() -> void:
 	# Only change animation if it's different from current
 	if desired_animation != current_animation_name:
 		_play_player_animation(desired_animation)
+	
+	# Force animation to keep playing if it stopped
+	if not anim_player.is_playing() and current_animation_name != "":
+		anim_player.play(current_animation_name)
 
 func _play_player_animation(animation_name: String) -> void:
 	if not anim_player:
@@ -624,7 +671,7 @@ func _play_player_animation(animation_name: String) -> void:
 	# Check if the animation exists
 	if not anim_player.has_animation(animation_name):
 		# Try common fallback names
-		var fallbacks = ["idle", "walk", "Idle", "Walk", "default"]
+		var fallbacks = ["Idle_A", "Walk_A", "idle", "walk", "Idle", "Walk", "default"]
 		for fallback in fallbacks:
 			if anim_player.has_animation(fallback):
 				animation_name = fallback
@@ -636,7 +683,7 @@ func _play_player_animation(animation_name: String) -> void:
 	current_animation_name = animation_name
 	
 	# Play the animation with smooth transition
-	if anim_player.current_animation != "":
+	if anim_player.current_animation != "" and anim_player.current_animation != animation_name:
 		anim_player.play(animation_name, ANIMATION_TRANSITION_SPEED)
 	else:
 		anim_player.play(animation_name)
@@ -685,14 +732,23 @@ func setup_player_role() -> void:
 		player_color = Color.RED
 		_set_player_color(Color.RED)
 		has_gun_visible = true
+		is_host_player = true
+		# Broadcast that this player is the host
+		set_as_host_player.rpc()
 		print("Host assigned RED color and gun for peer: ", multiplayer.get_unique_id())
 	else:
 		# Client gets random color and NO gun visible
 		assign_random_color()
 		has_gun_visible = false
+		is_host_player = false
 		# Tell everyone to hide this player's gun
 		set_gun_visibility.rpc(false)
 		print("Client assigned no gun for peer: ", multiplayer.get_unique_id())
+
+@rpc("any_peer", "call_local", "reliable")
+func set_as_host_player() -> void:
+	is_host_player = true
+	print("Player ", name, " marked as host player")
 
 func assign_player_color() -> void:
 	if not is_multiplayer_authority():
@@ -722,10 +778,27 @@ func has_gun() -> bool:
 @rpc("any_peer", "call_local")
 func set_gun_visibility(visible: bool) -> void:
 	has_gun_visible = visible
-	var pistol = camera.get_node_or_null("pistol")
+	# Try to find pistol under the player root instead of camera
+	var pistol = get_node_or_null("pistol")
+	if not pistol:
+		# If not found at root, search recursively
+		pistol = _find_node_recursive(self, "pistol")
+	
 	if pistol:
 		pistol.visible = visible
 		print("Gun visibility set to: ", visible, " for peer: ", multiplayer.get_unique_id())
+	else:
+		print("WARNING: Could not find pistol node for peer: ", multiplayer.get_unique_id())
+
+# Helper function to find a node by name recursively
+func _find_node_recursive(node: Node, node_name: String) -> Node:
+	if node.name == node_name:
+		return node
+	for child in node.get_children():
+		var result = _find_node_recursive(child, node_name)
+		if result:
+			return result
+	return null
 
 func hide_gun() -> void:
 	# Hide the gun for clients
@@ -739,9 +812,9 @@ func _set_player_color(new_color: Color) -> void:
 			material = StandardMaterial3D.new()
 			mesh_instance.set_surface_override_material(0, material)
 		material.albedo_color = new_color
-		#print("Player color set to: ", new_color, " for peer: ", multiplayer.get_unique_id())
-	#else:
-		#print("ERROR: MeshInstance3D is null for peer: ", multiplayer.get_unique_id())
+		print("Player color set to: ", new_color, " for peer: ", multiplayer.get_unique_id())
+	else:
+		print("ERROR: MeshInstance3D is null for peer: ", multiplayer.get_unique_id())
 
 func _set_synced_skin_index(new_index: int) -> void:
 	var old_index = synced_skin_index
@@ -764,6 +837,12 @@ func _set_synced_mesh_index(new_index: int) -> void:
 		print("Synced mesh index changed from ", old_index, " to ", new_index, " for player ", name)
 		# Update visibility when mesh index changes
 		call_deferred("_update_skin_visibility")
+
+func _set_synced_velocity(new_velocity: Vector3) -> void:
+	synced_velocity = new_velocity
+
+func _set_synced_is_moving(new_is_moving: bool) -> void:
+	synced_is_moving = new_is_moving
 
 # Debug functions
 func debug_skin_state() -> void:
